@@ -17,7 +17,10 @@ def encode_preview(frame, landmarks, pose):
         cv2.circle(preview, index_center, 12, (66, 255, 217), -1)
         cv2.circle(preview, index_center, 12, (21, 18, 23), 2)
         if pose == "index_pinch":
-            cv2.circle(preview, index_center, 17, (246, 105, 65), 4)
+            thumb = landmarks[4]
+            thumb_center = (int((1 - thumb[0]) * width), int(thumb[1] * height))
+            cv2.circle(preview, thumb_center, 12, (246, 105, 65), -1)
+            cv2.circle(preview, thumb_center, 12, (21, 18, 23), 2)
         elif pose in ("scroll", "middle_pinch"):
             middle = landmarks[12]
             middle_center = (int((1 - middle[0]) * width), int(middle[1] * height))
