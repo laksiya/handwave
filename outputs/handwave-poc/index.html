@@ -21,8 +21,6 @@
     .status.live .status-dot { background:#36b35b; box-shadow:0 0 0 4px rgba(54,179,91,.14); }
     .primary { border:0; border-radius:999px; background:var(--ink); color:white; padding:11px 17px; font-weight:800; cursor:pointer; }
     .primary:hover { background:#302a32; }
-    .voice-button { border:1px solid var(--ink); border-radius:999px; background:var(--acid); color:var(--ink); padding:10px 15px; font-weight:850; cursor:pointer; }
-    .voice-button.listening { background:var(--coral); color:var(--ink); }
     main { position:relative; display:grid; grid-template-columns:250px 1fr; min-height:0; }
     aside { border-right:1px solid var(--line); padding:26px 20px; display:flex; flex-direction:column; gap:28px; background:rgba(255,255,255,.18); z-index:5; }
     .eyebrow { font-size:.72rem; font-weight:900; letter-spacing:.13em; text-transform:uppercase; opacity:.52; margin:0 0 13px; }
@@ -56,16 +54,6 @@
     .motion-cursor.dwelling { animation:pulse .65s infinite alternate; }
     .motion-cursor.secondary { border-color:var(--blue); background:rgba(65,105,246,.28); box-shadow:0 0 0 7px rgba(65,105,246,.16); }
     .motion-cursor.secondary::after { background:var(--blue); }
-    .agent-cursor { position:fixed; width:46px; height:46px; border-radius:14px 14px 14px 3px; background:#ff43bb; color:var(--ink); border:2px solid var(--ink); display:none; place-items:center; font-size:.7rem; font-weight:950; z-index:105; transform:translate(-50%,-50%) rotate(-12deg); box-shadow:5px 5px 0 rgba(21,18,23,.2); pointer-events:none; }
-    .agent-cursor.active { display:grid; }
-    .agent-cursor span { transform:rotate(12deg); }
-    .voice-panel { position:fixed; right:22px; top:82px; width:min(340px,calc(100vw - 44px)); padding:14px 16px; background:var(--ink); color:white; border-radius:14px; z-index:90; box-shadow:7px 7px 0 rgba(255,67,187,.45); opacity:0; transform:translateY(-8px); transition:.2s; pointer-events:none; }
-    .voice-panel.show { opacity:1; transform:none; pointer-events:auto; }
-    .voice-panel b { display:block; color:#ff7dce; font-size:.72rem; letter-spacing:.1em; margin-bottom:5px; }
-    .voice-panel p { margin:0; font-size:.86rem; line-height:1.4; }
-    .voice-form { display:flex; gap:7px; margin-top:11px; pointer-events:auto; }
-    .voice-form input { min-width:0; flex:1; border:1px solid rgba(255,255,255,.3); background:#2b252d; color:white; border-radius:9px; padding:9px 10px; font:inherit; font-size:.78rem; }
-    .voice-form button { border:0; border-radius:9px; background:#ff43bb; color:var(--ink); padding:8px 11px; font-weight:900; cursor:pointer; }
     @keyframes pulse { to { box-shadow:0 0 0 15px rgba(65,105,246,.18); border-color:var(--blue); } }
     .camera { position:absolute; right:20px; bottom:20px; width:176px; aspect-ratio:4/3; border:1px solid var(--ink); border-radius:14px; overflow:hidden; background:var(--ink); z-index:10; box-shadow:5px 5px 0 rgba(21,18,23,.22); display:none; }
     .camera.live { display:block; }
@@ -84,7 +72,6 @@
       <div class="brand"><span class="brand-mark">HW</span> Handwave</div>
       <div class="header-actions">
         <div id="status" class="status"><span class="status-dot"></span><span id="statusText">Camera off</span></div>
-        <button id="voiceButton" class="voice-button" aria-label="Hold to talk">Hold V to talk</button>
         <button id="cameraButton" class="primary">Enable hand control</button>
       </div>
     </header>
@@ -92,26 +79,25 @@
       <aside>
         <section><p class="eyebrow">Tools</p><div class="tool active"><span class="tool-icon">↖</span> Move</div><div class="tool"><span class="tool-icon">T</span> Text</div><div class="tool"><span class="tool-icon">□</span> Shape</div></section>
         <section><p class="eyebrow">Motion control</p><div class="tool"><span class="tool-icon">◎</span> Motion cursor</div></section>
-        <div class="help"><strong>Hands + voice.</strong><p>Open palm steers; close to grab. Hold V to speak to the agent, then release to send your instruction.</p></div>
+        <div class="help"><strong>Open, close, move.</strong><p>Either open palm steers its cursor. Close either hand over an object to pick it up. Move while closed, then open to release.</p></div>
       </aside>
       <section class="workspace" id="workspace">
         <div class="canvas-title"><h1>Motion canvas</h1><p>Arrange the pieces with a wave of your hand.</p></div>
         <div class="artboard" id="artboard">
-          <div class="object obj-card" data-object="blue block" tabindex="0"><div class="num">01 / EXPLORE</div><div class="big">Ideas in<br>motion.</div></div>
-          <div class="object obj-pill" data-object="green block" tabindex="0">MAKE IT MOVE →</div>
-          <div class="object obj-circle" data-object="orange block" tabindex="0">PLAY<br>MORE</div>
-          <div class="object obj-note" data-object="black block" tabindex="0"><b>Hands on. Mouse off.</b><p>A tiny experiment in physical, playful interface design.</p></div>
+          <div class="object obj-card" tabindex="0"><div class="num">01 / EXPLORE</div><div class="big">Ideas in<br>motion.</div></div>
+          <div class="object obj-pill" tabindex="0">MAKE IT MOVE →</div>
+          <div class="object obj-circle" tabindex="0">PLAY<br>MORE</div>
+          <div class="object obj-note" tabindex="0"><b>Hands on. Mouse off.</b><p>A tiny experiment in physical, playful interface design.</p></div>
         </div>
         <div class="camera" id="camera"><video id="video" autoplay muted playsinline></video><canvas id="motionCanvas"></canvas><div class="camera-label" id="gestureLabel">SHOW YOUR HAND</div></div>
       </section>
     </main>
   </div>
-  <div id="motionCursor" class="motion-cursor"></div><div id="secondCursor" class="motion-cursor secondary"></div><div id="agentCursor" class="agent-cursor"><span>AI</span></div><div id="voicePanel" class="voice-panel"><b>VOICE AGENT</b><p id="voiceText"></p><form id="voiceForm" class="voice-form"><input id="voiceInput" aria-label="Type an agent command" placeholder="Move the black block…"><button>Send</button></form></div><div id="toast" class="toast"></div>
+  <div id="motionCursor" class="motion-cursor"></div><div id="secondCursor" class="motion-cursor secondary"></div><div id="toast" class="toast"></div>
   <script type="module">
     import {FilesetResolver,HandLandmarker} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm';
-    import {pipeline,env} from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2/+esm';
     const video=document.querySelector('#video'), canvas=document.querySelector('#motionCanvas'), ctx=canvas.getContext('2d');
-    const cursor=document.querySelector('#motionCursor'),secondCursor=document.querySelector('#secondCursor'),button=document.querySelector('#cameraButton'),camera=document.querySelector('#camera'),voiceButton=document.querySelector('#voiceButton'),agentCursor=document.querySelector('#agentCursor'),voicePanel=document.querySelector('#voicePanel'),voiceText=document.querySelector('#voiceText'),voiceForm=document.querySelector('#voiceForm'),voiceInput=document.querySelector('#voiceInput');
+    const cursor=document.querySelector('#motionCursor'),secondCursor=document.querySelector('#secondCursor'),button=document.querySelector('#cameraButton'),camera=document.querySelector('#camera');
     const status=document.querySelector('#status'), statusText=document.querySelector('#statusText'), toast=document.querySelector('#toast'), gestureLabel=document.querySelector('#gestureLabel');
     let stream=null,landmarker=null,running=false,lastVideoTime=-1,cursorX=innerWidth/2,cursorY=innerHeight/2,handX=null,handY=null,secondX=innerWidth/2,secondY=innerHeight/2,hovered=null,held=null,hovered2=null,held2=null,gesture='none',candidate='none',candidateFrames=0,gesture2='none',candidate2='none',candidateFrames2=0;
     const showToast=t=>{toast.textContent=t;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),1800)};
@@ -166,59 +152,7 @@
       }
       requestAnimationFrame(trackHand);
     }
-    env.allowLocalModels=false;
-    let agentBusy=false,transcriber=null,transcriberPromise=null,audioStream=null,audioContext=null,audioSource=null,audioProcessor=null,silentGain=null,pcmChunks=[],pushToTalkActive=false;
-    const say=text=>new Promise(resolve=>{speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.rate=1.03;utterance.pitch=1.02;utterance.onend=resolve;utterance.onerror=resolve;speechSynthesis.speak(utterance);});
-    function showVoice(text){voiceText.textContent=text;voicePanel.classList.add('show');}
-    function findObject(text){
-      const aliases=[['black','black block'],['dark','black block'],['note','black block'],['blue','blue block'],['card','blue block'],['green','green block'],['pill','green block'],['orange','orange block'],['circle','orange block']];
-      const match=aliases.find(([word])=>text.includes(word));return match?document.querySelector(`[data-object="${match[1]}"]`):null;
-    }
-    function findDestination(text,board,item){
-      const gap=26,maxX=board.width-item.width-gap,maxY=board.height-item.height-gap;let x=(board.width-item.width)/2,y=(board.height-item.height)/2;
-      if(text.includes('left'))x=gap;if(text.includes('right')||text.includes('side'))x=maxX;if(text.includes('top'))y=gap;if(text.includes('bottom'))y=maxY;
-      return{x:Math.max(0,x),y:Math.max(0,y)};
-    }
-    function tween(duration,draw){return new Promise(resolve=>{const start=performance.now();function frame(now){const t=Math.min(1,(now-start)/duration),ease=1-Math.pow(1-t,3);draw(ease);t<1?requestAnimationFrame(frame):resolve();}requestAnimationFrame(frame);});}
-    async function performAgentMove(object,text){
-      agentBusy=true;const boardEl=document.querySelector('#artboard'),board=boardEl.getBoundingClientRect(),rect=object.getBoundingClientRect(),startCursor={x:innerWidth-70,y:110},pickup={x:rect.left+rect.width/2,y:rect.top+rect.height/2};agentCursor.style.left=startCursor.x+'px';agentCursor.style.top=startCursor.y+'px';agentCursor.classList.add('active');
-      const objectName=object.dataset.object,ack=`Okay, let's move the ${objectName}.`;showVoice(ack);const speaking=say(ack);
-      await tween(650,t=>{agentCursor.style.left=(startCursor.x+(pickup.x-startCursor.x)*t)+'px';agentCursor.style.top=(startCursor.y+(pickup.y-startCursor.y)*t)+'px';});object.classList.add('dragging');
-      const item={width:rect.width,height:rect.height},destination=findDestination(text,board,item),from={x:rect.left-board.left,y:rect.top-board.top},toCursor={x:board.left+destination.x+rect.width/2,y:board.top+destination.y+rect.height/2};
-      await tween(1050,t=>{const x=from.x+(destination.x-from.x)*t,y=from.y+(destination.y-from.y)*t;object.style.left=x+'px';object.style.top=y+'px';agentCursor.style.left=(pickup.x+(toCursor.x-pickup.x)*t)+'px';agentCursor.style.top=(pickup.y+(toCursor.y-pickup.y)*t)+'px';});object.classList.remove('dragging');await speaking;showVoice(`Done — the ${objectName} is in place.`);await say('Done.');setTimeout(()=>voicePanel.classList.remove('show'),2200);agentCursor.classList.remove('active');agentBusy=false;
-    }
-    async function handleVoiceCommand(raw){
-      const text=raw.toLowerCase().trim();showVoice(`You: “${raw}”`);const object=findObject(text);
-      if(!object||!/(move|put|place|take|shift)/.test(text)){agentBusy=true;const reply="I can move the black, blue, green, or orange block. Try saying: move the black block to the bottom left.";showVoice(reply);await say(reply);agentBusy=false;return;}
-      performAgentMove(object,text);
-    }
-    function loadWhisper(){
-      if(transcriber)return Promise.resolve(transcriber);if(transcriberPromise)return transcriberPromise;
-      showVoice('Loading local speech model — first use can take a minute…');
-      const options=navigator.gpu?{device:'webgpu',dtype:{encoder_model:'fp32',decoder_model_merged:'q4'}}:{device:'wasm',dtype:'q8'};
-      transcriberPromise=pipeline('automatic-speech-recognition','onnx-community/whisper-tiny.en',{...options,progress_callback:p=>{if(p.status==='progress'&&p.total){const percent=Math.round(p.loaded/p.total*100);showVoice(`Loading local speech model · ${percent}%`);}}}).then(model=>{transcriber=model;showVoice('Ready — hold V and speak.');return model;}).catch(error=>{transcriberPromise=null;throw error;});return transcriberPromise;
-    }
-    function resampleAudio(chunks,inputRate){
-      const length=chunks.reduce((sum,chunk)=>sum+chunk.length,0),input=new Float32Array(length);let offset=0;for(const chunk of chunks){input.set(chunk,offset);offset+=chunk.length;}if(inputRate===16000)return input;
-      const ratio=inputRate/16000,output=new Float32Array(Math.floor(input.length/ratio));for(let i=0;i<output.length;i++){const position=i*ratio,left=Math.floor(position),right=Math.min(left+1,input.length-1),mix=position-left;output[i]=input[left]*(1-mix)+input[right]*mix;}return output;
-    }
-    async function startPushToTalk(){
-      if(pushToTalkActive||agentBusy)return;pushToTalkActive=true;voiceButton.classList.add('listening');voiceButton.textContent='Listening… release V';showVoice('Listening…');
-      try{audioStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,channelCount:1}});if(!pushToTalkActive){audioStream.getTracks().forEach(track=>track.stop());return;}audioContext=new AudioContext();await audioContext.resume();pcmChunks=[];audioSource=audioContext.createMediaStreamSource(audioStream);audioProcessor=audioContext.createScriptProcessor(4096,1,1);silentGain=audioContext.createGain();silentGain.gain.value=0;audioProcessor.onaudioprocess=e=>pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));audioSource.connect(audioProcessor);audioProcessor.connect(silentGain);silentGain.connect(audioContext.destination);loadWhisper().catch(()=>{});}catch{pushToTalkActive=false;voiceButton.classList.remove('listening');voiceButton.textContent='Hold V to talk';showVoice('Microphone access is blocked. Allow it in site permissions, then try again.');}
-    }
-    async function stopPushToTalk(){
-      if(!pushToTalkActive)return;pushToTalkActive=false;if(!audioContext){voiceButton.classList.remove('listening');voiceButton.textContent='Hold V to talk';return;}voiceButton.classList.remove('listening');voiceButton.textContent='Transcribing…';
-      const inputRate=audioContext.sampleRate;audioProcessor?.disconnect();audioSource?.disconnect();silentGain?.disconnect();audioStream?.getTracks().forEach(track=>track.stop());await audioContext.close();const audio=resampleAudio(pcmChunks,inputRate);audioContext=null;audioProcessor=null;audioSource=null;silentGain=null;
-      if(audio.length<2400){voiceButton.textContent='Hold V to talk';showVoice('That was too short. Hold V while you speak, then release.');return;}
-      try{const model=await loadWhisper();showVoice('Transcribing locally…');const result=await model(audio,{language:'en',task:'transcribe'}),text=result.text.trim();voiceButton.textContent='Hold V to talk';if(text){showVoice(`You: “${text}”`);handleVoiceCommand(text);}else{showVoice('I didn’t catch that. Hold V and try again.');}}catch(error){console.error(error);voiceButton.textContent='Hold V to talk';showVoice('Whisper could not process that recording. Try again or use the typed command.');}
-    }
     button.addEventListener('click',toggleCamera);
-    voiceButton.addEventListener('pointerdown',e=>{e.preventDefault();startPushToTalk();});
-    voiceButton.addEventListener('pointerup',e=>{e.preventDefault();stopPushToTalk();});
-    voiceButton.addEventListener('pointercancel',stopPushToTalk);
-    addEventListener('keydown',e=>{if(e.code==='KeyV'&&!e.repeat&&!['INPUT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();startPushToTalk();}});
-    addEventListener('keyup',e=>{if(e.code==='KeyV'){e.preventDefault();stopPushToTalk();}});
-    voiceForm.addEventListener('submit',e=>{e.preventDefault();const command=voiceInput.value.trim();if(command&&!agentBusy){voiceInput.value='';handleVoiceCommand(command);}});
     document.querySelectorAll('.object').forEach(el=>{el.addEventListener('pointerdown',e=>{if(running)return;el.setPointerCapture(e.pointerId);el.classList.add('dragging');let r=el.getBoundingClientRect(),dx=e.clientX-r.left,dy=e.clientY-r.top;const move=v=>{let b=document.querySelector('#artboard').getBoundingClientRect();el.style.left=Math.max(0,Math.min(b.width-r.width,v.clientX-b.left-dx))+'px';el.style.top=Math.max(0,Math.min(b.height-r.height,v.clientY-b.top-dy))+'px'};el.onpointermove=move;el.onpointerup=()=>{el.classList.remove('dragging');el.onpointermove=null;el.onpointerup=null;};});});
   </script>
 </body>
