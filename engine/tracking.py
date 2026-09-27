@@ -15,8 +15,11 @@ class AdaptivePointer:
             alpha = min(0.92, self.floor + speed * self.boost)
             self.x += (raw_x - self.x) * alpha
             self.y += (raw_y - self.y) * alpha
+        return self.project(self.x, self.y)
+
+    def project(self, raw_x, raw_y):
         span = max(0.1, 1 - self.margin * 2)
-        return max(0.0, min(1.0, (self.x - self.margin) / span)), max(0.0, min(1.0, (self.y - self.margin) / span))
+        return max(0.0, min(1.0, (raw_x - self.margin) / span)), max(0.0, min(1.0, (raw_y - self.margin) / span))
 
 def palm_center(landmarks):
     points = [landmarks[index] for index in (0, 5, 9, 13, 17)]

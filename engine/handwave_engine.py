@@ -2,7 +2,7 @@ import base64, json, queue, sys, threading, time
 import cv2
 import mediapipe as mp
 from config import EngineConfig
-from gestures import GestureController, classify_hand
+from gestures import GestureController, classify_hand, scroll_orientation
 from pointer_win32 import WindowsPointer
 from tracking import AdaptivePointer
 
@@ -88,7 +88,13 @@ class TrackingEngine:
                 if detected_hands:
                     landmarks = [(p.x, p.y, p.z) for p in detected_hands[0].landmark]
                     raw_x, raw_y = landmarks[8][0], landmarks[8][1]
-                    current, should_move, actions = self.gesture.update(classify_hand(landmarks), now, raw_y)
+                    pose = classify_hand(landmarks)
+                    direction = scroll_orientation(landmarks) if pose == "scroll" else 0
+                    current, should_move, actions = self.gesture.update(pose, now, raw_y, direction)
+                    lime_x, lime_y = self.smoother.project(1 - landmarks[8][0], landmarks[8][1])
+                    blue_point = landmarks[4] if pose == "index_pinch" else landmarks[12] if pose in ("scroll", "middle_pinch") else None
+                    blue = self.smoother.project(1 - blue_point[0], blue_point[1]) if blue_point else None
+                    emit("markers", lime={"x": lime_x, "y": lime_y}, blue=None if blue is None else {"x": blue[0], "y": blue[1]})
                     if should_move:
                         screen_x, screen_y = self.smoother.update(1 - raw_x, raw_y); self.pointer.move(screen_x, screen_y)
                     for action in actions:
@@ -101,6 +107,7 @@ class TrackingEngine:
                 elif now - self.last_hand > self.config.lost_hand_release_seconds:
                     for action in self.gesture.reset():
                         if action == "release": self.pointer.release()
+                    emit("markers", lime=None, blue=None)
                 if now - last_preview >= 0.10:
                     image = encode_preview(frame, landmarks, current)
                     if image: emit("preview", image=image)

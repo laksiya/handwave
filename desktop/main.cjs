@@ -2,7 +2,7 @@ const { app, BrowserWindow, Menu, Tray, globalShortcut, nativeImage, ipcMain, sc
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 
-let window, previewWindow, tray, engine;
+let window, previewWindow, overlayWindow, tray, engine;
 let quitting = false, buffer = '';
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const root = path.join(__dirname, '..');
@@ -19,6 +19,10 @@ function sendCommand(command, extra = {}) {
 function publish(message) {
   if (message.event === 'preview') {
     previewWindow?.webContents.send('preview-frame', message.image);
+    return;
+  }
+  if (message.event === 'markers') {
+    overlayWindow?.webContents.send('markers', { lime: message.lime, blue: message.blue });
     return;
   }
   window?.webContents.send('engine-status', message);
@@ -57,6 +61,11 @@ else app.whenReady().then(() => {
   previewWindow = new BrowserWindow({ width: 264, height: 184, x: workArea.x + workArea.width - 284, y: workArea.y + workArea.height - 204, frame: false, transparent: true, resizable: false, alwaysOnTop: true, skipTaskbar: true, title: 'Handwave camera', webPreferences: { preload: path.join(__dirname, 'preview-preload.cjs'), contextIsolation: true, nodeIntegration: false } });
   previewWindow.loadFile(path.join(__dirname, 'preview.html'));
   previewWindow.on('close', event => { if (!quitting) { event.preventDefault(); previewWindow.hide(); } });
+  const bounds = screen.getPrimaryDisplay().bounds;
+  overlayWindow = new BrowserWindow({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, frame: false, transparent: true, resizable: false, movable: false, focusable: false, alwaysOnTop: true, skipTaskbar: true, hasShadow: false, webPreferences: { preload: path.join(__dirname, 'overlay-preload.cjs'), contextIsolation: true, nodeIntegration: false } });
+  overlayWindow.setIgnoreMouseEvents(true);
+  overlayWindow.loadFile(path.join(__dirname, 'overlay.html'));
+  overlayWindow.setAlwaysOnTop(true, 'screen-saver');
   tray = new Tray(trayIcon()); tray.setToolTip('Handwave · starting');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show settings', click: showWindow }, { label: 'Show camera tile', click: showPreview }, { type: 'separator' }, { label: 'Pause control', click: () => sendCommand('pause') }, { label: 'Resume control', click: () => sendCommand('resume') }, { type: 'separator' }, { label: 'Quit Handwave', click: () => { quitting = true; app.quit(); } }
