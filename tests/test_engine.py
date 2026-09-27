@@ -1,11 +1,13 @@
 import sys
 import unittest
 from pathlib import Path
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "engine"))
 
 from gestures import GestureController, GestureState, classify_hand
 from tracking import AdaptivePointer
+from handwave_engine import encode_preview
 
 
 def hand(*extended):
@@ -52,6 +54,14 @@ class GestureTests(unittest.TestCase):
         self.assertTrue(moving)
         self.assertIn("press", actions)
 
+    def test_raw_pinch_freezes_cursor_before_confirmation(self):
+        controller = GestureController(stable_frames=3)
+        controller.update("point", 0.00, 0.5)
+        controller.update("point", 0.02, 0.5)
+        controller.update("point", 0.04, 0.5)
+        _, moving, _ = controller.update("index_pinch", 0.06, 0.62)
+        self.assertFalse(moving)
+
 
 class PointerTests(unittest.TestCase):
     def test_active_area_maps_to_full_screen(self):
@@ -59,6 +69,11 @@ class PointerTests(unittest.TestCase):
         self.assertEqual(pointer.update(0.12, 0.12), (0.0, 0.0))
         pointer = AdaptivePointer(margin=0.12, floor=1.0, boost=0.0)
         self.assertEqual(pointer.update(0.88, 0.88), (1.0, 1.0))
+
+    def test_preview_encodes_tracked_hand_overlay(self):
+        frame = np.zeros((180, 320, 3), dtype=np.uint8)
+        image = encode_preview(frame, [hand("index"), hand("index", "middle")])
+        self.assertGreater(len(image), 100)
 
 
 if __name__ == "__main__":

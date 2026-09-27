@@ -1,12 +1,25 @@
-import json, queue, sys, threading, time
+import base64, json, queue, sys, threading, time
 import cv2
 import mediapipe as mp
 from config import EngineConfig
 from gestures import GestureController, classify_hand
 from pointer_win32 import WindowsPointer
-from tracking import AdaptivePointer
+from tracking import AdaptivePointer, palm_center
 
 def emit(event, **data): print(json.dumps({"event": event, **data}), flush=True)
+
+def encode_preview(frame, hands_points):
+    preview = cv2.flip(frame, 1)
+    height, width = preview.shape[:2]
+    for index, points in enumerate(hands_points):
+        x, y = palm_center(points)
+        color = (66, 255, 217) if index == 0 else (246, 105, 65)
+        center = (int((1 - x) * width), int(y * height))
+        cv2.circle(preview, center, 12, color, -1)
+        cv2.circle(preview, center, 12, (21, 18, 23), 2)
+    small = cv2.resize(preview, (320, 180), interpolation=cv2.INTER_AREA)
+    ok, encoded = cv2.imencode('.jpg', small, [cv2.IMWRITE_JPEG_QUALITY, 62])
+    return base64.b64encode(encoded).decode('ascii') if ok else None
 
 class FreshFrameCamera:
     def __init__(self, config):
@@ -53,15 +66,17 @@ class TrackingEngine:
     def run(self):
         threading.Thread(target=self.command_reader, daemon=True).start(); camera = FreshFrameCamera(self.config)
         if not camera.running: emit("fault", message="Camera could not start. Close other camera apps and retry."); return 2
-        hands = mp.solutions.hands.Hands(static_image_mode=False, max_num_hands=1, model_complexity=0, min_detection_confidence=0.55, min_tracking_confidence=0.55)
-        emit("ready", config=self.config.json()); frame_count = 0; fps_started = last_status = time.perf_counter()
+        hands = mp.solutions.hands.Hands(static_image_mode=False, max_num_hands=2, model_complexity=0, min_detection_confidence=0.55, min_tracking_confidence=0.55)
+        emit("ready", config=self.config.json()); frame_count = 0; fps_started = last_status = last_preview = time.perf_counter()
         try:
             while self.running:
                 self.apply_commands(); frame = camera.latest()
                 if self.paused or frame is None: time.sleep(0.008); continue
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB); rgb.flags.writeable = False; result = hands.process(rgb); now = time.perf_counter(); frame_count += 1
-                if result.multi_hand_landmarks:
-                    landmarks = [(p.x, p.y, p.z) for p in result.multi_hand_landmarks[0].landmark]
+                detected_hands = result.multi_hand_landmarks or []
+                if detected_hands:
+                    hands_points = [[(p.x, p.y, p.z) for p in hand.landmark] for hand in detected_hands]
+                    landmarks = hands_points[0]
                     raw_x, raw_y = landmarks[8][0], landmarks[8][1]
                     current, should_move, actions = self.gesture.update(classify_hand(landmarks), now, raw_y)
                     if should_move:
@@ -76,8 +91,12 @@ class TrackingEngine:
                 elif now - self.last_hand > self.config.lost_hand_release_seconds:
                     for action in self.gesture.reset():
                         if action == "release": self.pointer.release()
+                if now - last_preview >= 0.10:
+                    image = encode_preview(frame, hands_points if detected_hands else [])
+                    if image: emit("preview", image=image)
+                    last_preview = now
                 if now - last_status >= 1.0:
-                    emit("tracking", fps=round(frame_count / (now - fps_started), 1), gesture=self.gesture.state.current, hand=bool(result.multi_hand_landmarks)); last_status = now
+                    emit("tracking", fps=round(frame_count / (now - fps_started), 1), gesture=self.gesture.state.current, hand=bool(detected_hands)); last_status = now
         finally:
             self.pointer.release(); hands.close(); camera.close(); emit("stopped")
         return 0

@@ -1,8 +1,8 @@
-const { app, BrowserWindow, Menu, Tray, globalShortcut, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, Tray, globalShortcut, nativeImage, ipcMain, screen } = require('electron');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 
-let window, tray, engine;
+let window, previewWindow, tray, engine;
 let quitting = false, buffer = '';
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const root = path.join(__dirname, '..');
@@ -17,6 +17,10 @@ function sendCommand(command, extra = {}) {
 }
 
 function publish(message) {
+  if (message.event === 'preview') {
+    previewWindow?.webContents.send('preview-frame', message.image);
+    return;
+  }
   window?.webContents.send('engine-status', message);
   if (message.event === 'tracking') tray?.setToolTip(`Handwave · ${message.fps} fps`);
 }
@@ -42,15 +46,20 @@ function stopEngine() {
 
 function restartEngine() { stopEngine(); setTimeout(startEngine, 1400); }
 function showWindow() { window.show(); window.focus(); }
+function showPreview() { previewWindow.showInactive(); }
 
 if (!hasSingleInstanceLock) app.quit();
 else app.whenReady().then(() => {
   window = new BrowserWindow({ width: 820, height: 700, minWidth: 720, minHeight: 620, title: 'Handwave', backgroundColor: '#f4f0e8', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false } });
   window.loadFile(path.join(__dirname, 'control.html'));
   window.on('close', event => { if (!quitting) { event.preventDefault(); window.hide(); } });
+  const workArea = screen.getPrimaryDisplay().workArea;
+  previewWindow = new BrowserWindow({ width: 264, height: 184, x: workArea.x + workArea.width - 284, y: workArea.y + workArea.height - 204, frame: false, transparent: true, resizable: false, alwaysOnTop: true, skipTaskbar: true, title: 'Handwave camera', webPreferences: { preload: path.join(__dirname, 'preview-preload.cjs'), contextIsolation: true, nodeIntegration: false } });
+  previewWindow.loadFile(path.join(__dirname, 'preview.html'));
+  previewWindow.on('close', event => { if (!quitting) { event.preventDefault(); previewWindow.hide(); } });
   tray = new Tray(trayIcon()); tray.setToolTip('Handwave · starting');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Show Handwave', click: showWindow }, { label: 'Pause control', click: () => sendCommand('pause') }, { label: 'Resume control', click: () => sendCommand('resume') }, { type: 'separator' }, { label: 'Quit Handwave', click: () => { quitting = true; app.quit(); } }
+    { label: 'Show settings', click: showWindow }, { label: 'Show camera tile', click: showPreview }, { type: 'separator' }, { label: 'Pause control', click: () => sendCommand('pause') }, { label: 'Resume control', click: () => sendCommand('resume') }, { type: 'separator' }, { label: 'Quit Handwave', click: () => { quitting = true; app.quit(); } }
   ]));
   tray.on('double-click', showWindow);
   globalShortcut.register('Escape', () => sendCommand('pause'));
@@ -58,6 +67,7 @@ else app.whenReady().then(() => {
   ipcMain.on('engine-resume', () => sendCommand('resume'));
   ipcMain.on('engine-restart', restartEngine);
   ipcMain.on('engine-configure', (_event, values) => sendCommand('configure', { values }));
+  ipcMain.on('preview-hide', () => previewWindow.hide());
   startEngine();
 });
 

@@ -64,4 +64,5 @@ class GestureController:
                 if abs(delta) >= 0.008: actions.append(("scroll", delta)); self.scroll_y = vertical_position
             else: self.scroll_y = vertical_position
         else: self.scroll_y = None
-        return self.state.current, self.state.current == "point" or self.dragging, actions
+        raw_pinch = pose in ("index_pinch", "middle_pinch")
+        return self.state.current, (self.state.current == "point" and not raw_pinch) or self.dragging, actions
