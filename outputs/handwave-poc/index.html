@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="A local webcam-powered hand motion design canvas proof of concept." />
+  <title>Handwave — motion canvas</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%23131016'/%3E%3Cpath d='M18 34c5-11 9-15 14-15s9 4 14 15c-5 8-9 11-14 11s-9-3-14-11Z' fill='%23d8ff3e'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%23131016'/%3E%3C/svg%3E" />
+  <style>
+    :root { --ink:#151217; --acid:#d9ff42; --paper:#f4f0e8; --blue:#4169f6; --coral:#ff765d; --line:rgba(21,18,23,.18); }
+    * { box-sizing:border-box; }
+    html, body { margin:0; min-height:100%; background:var(--paper); color:var(--ink); font-family:Arial, Helvetica, sans-serif; }
+    button { font:inherit; }
+    .app { min-height:100vh; display:grid; grid-template-rows:auto 1fr; overflow:hidden; }
+    header { height:70px; display:flex; align-items:center; justify-content:space-between; padding:0 24px; border-bottom:1px solid var(--line); background:rgba(244,240,232,.9); backdrop-filter:blur(12px); z-index:20; }
+    .brand { display:flex; align-items:center; gap:11px; font-weight:900; letter-spacing:-.04em; font-size:1.25rem; }
+    .brand-mark { width:31px; height:31px; display:grid; place-items:center; background:var(--ink); color:var(--acid); border-radius:50%; font-size:.8rem; }
+    .header-actions { display:flex; align-items:center; gap:12px; }
+    .status { display:flex; align-items:center; gap:8px; padding:9px 13px; border:1px solid var(--line); border-radius:999px; font-size:.82rem; font-weight:700; }
+    .status-dot { width:8px; height:8px; background:#aaa39b; border-radius:50%; }
+    .status.live .status-dot { background:#36b35b; box-shadow:0 0 0 4px rgba(54,179,91,.14); }
+    .primary { border:0; border-radius:999px; background:var(--ink); color:white; padding:11px 17px; font-weight:800; cursor:pointer; }
+    .primary:hover { background:#302a32; }
+    .voice-button { border:1px solid var(--ink); border-radius:999px; background:var(--acid); color:var(--ink); padding:10px 15px; font-weight:850; cursor:pointer; }
+    .voice-button.listening { background:var(--coral); color:var(--ink); }
+    main { position:relative; display:grid; grid-template-columns:250px 1fr; min-height:0; }
+    aside { border-right:1px solid var(--line); padding:26px 20px; display:flex; flex-direction:column; gap:28px; background:rgba(255,255,255,.18); z-index:5; }
+    .eyebrow { font-size:.72rem; font-weight:900; letter-spacing:.13em; text-transform:uppercase; opacity:.52; margin:0 0 13px; }
+    .tool { display:flex; align-items:center; gap:12px; padding:12px; border-radius:12px; font-weight:750; font-size:.92rem; }
+    .tool.active { background:white; box-shadow:0 7px 25px rgba(24,19,25,.07); }
+    .tool-icon { width:28px; height:28px; border:1px solid var(--line); border-radius:8px; display:grid; place-items:center; }
+    .help { margin-top:auto; padding:15px; background:var(--acid); border:1px solid var(--ink); border-radius:15px; box-shadow:4px 4px 0 var(--ink); }
+    .help strong { display:block; margin-bottom:7px; font-size:.9rem; }
+    .help p { margin:0; font-size:.79rem; line-height:1.45; }
+    .workspace { position:relative; overflow:hidden; background-image:radial-gradient(rgba(21,18,23,.17) 1px,transparent 1px); background-size:22px 22px; }
+    .canvas-title { position:absolute; top:25px; left:29px; z-index:4; }
+    .canvas-title h1 { font-size:clamp(1.5rem,3vw,2.6rem); letter-spacing:-.065em; margin:0; line-height:.95; }
+    .canvas-title p { margin:8px 0 0; font-size:.86rem; opacity:.55; }
+    .artboard { position:absolute; inset:120px 8% 8%; min-height:410px; background:#fff; border:1px solid var(--ink); box-shadow:10px 10px 0 rgba(21,18,23,.14); overflow:hidden; }
+    .object { position:absolute; user-select:none; cursor:grab; touch-action:none; transition:box-shadow .2s, transform .15s; }
+    .object.hovered { outline:3px solid var(--blue); outline-offset:4px; }
+    .object.dragging { cursor:grabbing; box-shadow:0 18px 42px rgba(21,18,23,.23); transform:scale(1.02); }
+    .obj-card { left:13%; top:20%; width:230px; height:158px; padding:22px; border-radius:24px; background:var(--blue); color:white; transform:rotate(-4deg); }
+    .obj-card.dragging { transform:rotate(-4deg) scale(1.02); }
+    .obj-card .num { font-size:.76rem; font-weight:800; opacity:.65; }
+    .obj-card .big { margin-top:38px; font-weight:900; font-size:1.75rem; letter-spacing:-.055em; line-height:.95; }
+    .obj-pill { left:52%; top:17%; padding:17px 26px; background:var(--acid); border:1px solid var(--ink); border-radius:999px; font-weight:900; font-size:1.1rem; }
+    .obj-circle { left:64%; top:48%; width:145px; aspect-ratio:1; border-radius:50%; background:var(--coral); border:1px solid var(--ink); display:grid; place-items:center; font-weight:900; text-align:center; line-height:1; }
+    .obj-note { left:26%; top:59%; width:235px; padding:19px 21px; background:var(--ink); color:white; border-radius:5px; transform:rotate(2deg); }
+    .obj-note.dragging { transform:rotate(2deg) scale(1.02); }
+    .obj-note b { font-size:1.1rem; }
+    .obj-note p { margin:8px 0 0; font-size:.78rem; opacity:.66; line-height:1.4; }
+    .motion-cursor { position:fixed; width:34px; height:34px; border:2px solid var(--ink); border-radius:50%; pointer-events:none; z-index:100; transform:translate(-50%,-50%); display:none; background:rgba(217,255,66,.45); box-shadow:0 0 0 7px rgba(217,255,66,.22); }
+    .motion-cursor::after { content:""; position:absolute; inset:10px; background:var(--ink); border-radius:50%; }
+    .motion-cursor.active { display:block; }
+    .motion-cursor.dwelling { animation:pulse .65s infinite alternate; }
+    .motion-cursor.secondary { border-color:var(--blue); background:rgba(65,105,246,.28); box-shadow:0 0 0 7px rgba(65,105,246,.16); }
+    .motion-cursor.secondary::after { background:var(--blue); }
+    .agent-cursor { position:fixed; width:46px; height:46px; border-radius:14px 14px 14px 3px; background:#ff43bb; color:var(--ink); border:2px solid var(--ink); display:none; place-items:center; font-size:.7rem; font-weight:950; z-index:105; transform:translate(-50%,-50%) rotate(-12deg); box-shadow:5px 5px 0 rgba(21,18,23,.2); pointer-events:none; }
+    .agent-cursor.active { display:grid; }
+    .agent-cursor span { transform:rotate(12deg); }
+    .voice-panel { position:fixed; right:22px; top:82px; width:min(340px,calc(100vw - 44px)); padding:14px 16px; background:var(--ink); color:white; border-radius:14px; z-index:90; box-shadow:7px 7px 0 rgba(255,67,187,.45); opacity:0; transform:translateY(-8px); transition:.2s; pointer-events:none; }
+    .voice-panel.show { opacity:1; transform:none; pointer-events:auto; }
+    .voice-panel b { display:block; color:#ff7dce; font-size:.72rem; letter-spacing:.1em; margin-bottom:5px; }
+    .voice-panel p { margin:0; font-size:.86rem; line-height:1.4; }
+    .voice-form { display:flex; gap:7px; margin-top:11px; pointer-events:auto; }
+    .voice-form input { min-width:0; flex:1; border:1px solid rgba(255,255,255,.3); background:#2b252d; color:white; border-radius:9px; padding:9px 10px; font:inherit; font-size:.78rem; }
+    .voice-form button { border:0; border-radius:9px; background:#ff43bb; color:var(--ink); padding:8px 11px; font-weight:900; cursor:pointer; }
+    @keyframes pulse { to { box-shadow:0 0 0 15px rgba(65,105,246,.18); border-color:var(--blue); } }
+    .camera { position:absolute; right:20px; bottom:20px; width:176px; aspect-ratio:4/3; border:1px solid var(--ink); border-radius:14px; overflow:hidden; background:var(--ink); z-index:10; box-shadow:5px 5px 0 rgba(21,18,23,.22); display:none; }
+    .camera.live { display:block; }
+    video, #motionCanvas { position:absolute; width:100%; height:100%; object-fit:cover; }
+    video { transform:scaleX(-1); }
+    #motionCanvas { pointer-events:none; }
+    .camera-label { position:absolute; left:8px; bottom:8px; padding:5px 8px; background:rgba(21,18,23,.75); color:white; border-radius:8px; font-size:.65rem; font-weight:800; letter-spacing:.08em; }
+    .toast { position:fixed; left:50%; bottom:24px; translate:-50% 0; background:var(--ink); color:white; padding:12px 17px; border-radius:12px; z-index:110; font-size:.85rem; opacity:0; transform:translateY(16px); transition:.25s; pointer-events:none; }
+    .toast.show { opacity:1; transform:none; }
+    @media (max-width:760px) { main { grid-template-columns:1fr; } aside { display:none; } header { padding:0 14px; } .status { display:none; } .artboard { inset:120px 4% 8%; } .camera { width:130px; } .obj-card { width:180px; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand"><span class="brand-mark">HW</span> Handwave</div>
+      <div class="header-actions">
+        <div id="status" class="status"><span class="status-dot"></span><span id="statusText">Camera off</span></div>
+        <button id="voiceButton" class="voice-button" aria-label="Hold to talk">Hold V to talk</button>
+        <button id="cameraButton" class="primary">Enable hand control</button>
+      </div>
+    </header>
+    <main>
+      <aside>
+        <section><p class="eyebrow">Tools</p><div class="tool active"><span class="tool-icon">↖</span> Move</div><div class="tool"><span class="tool-icon">T</span> Text</div><div class="tool"><span class="tool-icon">□</span> Shape</div></section>
+        <section><p class="eyebrow">Motion control</p><div class="tool"><span class="tool-icon">◎</span> Motion cursor</div></section>
+        <div class="help"><strong>Hands + voice.</strong><p>Open palm steers; close to grab. Hold V to speak to the agent, then release to send your instruction.</p></div>
+      </aside>
+      <section class="workspace" id="workspace">
+        <div class="canvas-title"><h1>Motion canvas</h1><p>Arrange the pieces with a wave of your hand.</p></div>
+        <div class="artboard" id="artboard">
+          <div class="object obj-card" data-object="blue block" tabindex="0"><div class="num">01 / EXPLORE</div><div class="big">Ideas in<br>motion.</div></div>
+          <div class="object obj-pill" data-object="green block" tabindex="0">MAKE IT MOVE →</div>
+          <div class="object obj-circle" data-object="orange block" tabindex="0">PLAY<br>MORE</div>
+          <div class="object obj-note" data-object="black block" tabindex="0"><b>Hands on. Mouse off.</b><p>A tiny experiment in physical, playful interface design.</p></div>
+        </div>
+        <div class="camera" id="camera"><video id="video" autoplay muted playsinline></video><canvas id="motionCanvas"></canvas><div class="camera-label" id="gestureLabel">SHOW YOUR HAND</div></div>
+      </section>
+    </main>
+  </div>
+  <div id="motionCursor" class="motion-cursor"></div><div id="secondCursor" class="motion-cursor secondary"></div><div id="agentCursor" class="agent-cursor"><span>AI</span></div><div id="voicePanel" class="voice-panel"><b>VOICE AGENT</b><p id="voiceText"></p><form id="voiceForm" class="voice-form"><input id="voiceInput" aria-label="Type an agent command" placeholder="Move the black block…"><button>Send</button></form></div><div id="toast" class="toast"></div>
+  <script type="module">
+    import {FilesetResolver,HandLandmarker} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm';
+    import {pipeline,env} from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2/+esm';
+    const video=document.querySelector('#video'), canvas=document.querySelector('#motionCanvas'), ctx=canvas.getContext('2d');
+    const cursor=document.querySelector('#motionCursor'),secondCursor=document.querySelector('#secondCursor'),button=document.querySelector('#cameraButton'),camera=document.querySelector('#camera'),voiceButton=document.querySelector('#voiceButton'),agentCursor=document.querySelector('#agentCursor'),voicePanel=document.querySelector('#voicePanel'),voiceText=document.querySelector('#voiceText'),voiceForm=document.querySelector('#voiceForm'),voiceInput=document.querySelector('#voiceInput');
+    const status=document.querySelector('#status'), statusText=document.querySelector('#statusText'), toast=document.querySelector('#toast'), gestureLabel=document.querySelector('#gestureLabel');
+    let stream=null,landmarker=null,running=false,lastVideoTime=-1,cursorX=innerWidth/2,cursorY=innerHeight/2,handX=null,handY=null,secondX=innerWidth/2,secondY=innerHeight/2,hovered=null,held=null,hovered2=null,held2=null,gesture='none',candidate='none',candidateFrames=0,gesture2='none',candidate2='none',candidateFrames2=0;
+    const showToast=t=>{toast.textContent=t;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),1800)};
+    async function loadTracker(){
+      if(landmarker)return;
+      statusText.textContent='Loading hand tracker…';
+      const vision=await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+      landmarker=await HandLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',delegate:'GPU'},runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.55,minHandPresenceConfidence:.55,minTrackingConfidence:.55});
+    }
+    async function toggleCamera(){
+      if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;running=false;camera.classList.remove('live');cursor.classList.remove('active');secondCursor.classList.remove('active');status.classList.remove('live');statusText.textContent='Camera off';button.textContent='Enable hand control';return;}
+      button.disabled=true;
+      try{await loadTracker();stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});video.srcObject=stream;await video.play();canvas.width=320;canvas.height=240;running=true;lastVideoTime=-1;camera.classList.add('live');cursor.classList.add('active');status.classList.add('live');statusText.textContent='Show an open hand';button.textContent='Turn camera off';showToast('Open hand steers · fist grabs');requestAnimationFrame(trackHand);}catch(e){console.error(e);showToast('Hand tracking could not start');statusText.textContent='Tracker unavailable';}finally{button.disabled=false;}
+    }
+    const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+    function readGesture(lm){
+      const extended=[[8,6],[12,10],[16,14],[20,18]].filter(([tip,pip])=>dist(lm[0],lm[tip])>dist(lm[0],lm[pip])*1.18).length;
+      return extended>=3?'open':extended<=1?'fist':'neutral';
+    }
+    function applyGesture(next){
+      if(next==='neutral')return;
+      if(next!==candidate){candidate=next;candidateFrames=1;return;}
+      if(++candidateFrames<4||next===gesture)return;
+      const previousGesture=gesture;gesture=next;
+      if(gesture==='fist'&&!held&&hovered){held=hovered;held.classList.add('dragging');showToast('Picked up');}
+      if(gesture==='open'&&held&&previousGesture==='fist'){held.classList.remove('dragging');held=null;showToast('Released');}
+    }
+    function applyGesture2(next){
+      if(next==='neutral')return;
+      if(next!==candidate2){candidate2=next;candidateFrames2=1;return;}
+      if(++candidateFrames2<4||next===gesture2)return;
+      const previousGesture=gesture2;gesture2=next;
+      if(gesture2==='fist'&&!held2&&hovered2&&hovered2!==held){held2=hovered2;held2.classList.add('dragging');showToast('Blue hand picked up');}
+      if(gesture2==='open'&&held2&&previousGesture==='fist'){held2.classList.remove('dragging');held2=null;showToast('Blue hand released');}
+    }
+    function updateObjects(){
+      const el=document.elementFromPoint(cursorX,cursorY)?.closest('.object');
+      if(el!==hovered){hovered?.classList.remove('hovered');hovered=el;hovered?.classList.add('hovered');}
+      if(held&&gesture==='fist'){const board=document.querySelector('#artboard').getBoundingClientRect(),r=held.getBoundingClientRect();held.style.left=Math.max(0,Math.min(board.width-r.width,cursorX-board.left-r.width/2))+'px';held.style.top=Math.max(0,Math.min(board.height-r.height,cursorY-board.top-r.height/2))+'px';}
+    }
+    function updateSecondObjects(){
+      const el=document.elementFromPoint(secondX,secondY)?.closest('.object');
+      if(el!==hovered2){if(hovered2!==hovered)hovered2?.classList.remove('hovered');hovered2=el;hovered2?.classList.add('hovered');}
+      if(held2&&gesture2==='fist'){const board=document.querySelector('#artboard').getBoundingClientRect(),r=held2.getBoundingClientRect();held2.style.left=Math.max(0,Math.min(board.width-r.width,secondX-board.left-r.width/2))+'px';held2.style.top=Math.max(0,Math.min(board.height-r.height,secondY-board.top-r.height/2))+'px';}
+    }
+    function trackHand(){
+      if(!running)return;
+      if(video.currentTime!==lastVideoTime){lastVideoTime=video.currentTime;const result=landmarker.detectForVideo(video,performance.now());ctx.clearRect(0,0,canvas.width,canvas.height);
+        if(result.landmarks.length){const lm=result.landmarks[0],palm=[0,5,9,13,17].reduce((p,i)=>({x:p.x+lm[i].x/5,y:p.y+lm[i].y/5}),{x:0,y:0});const foundX=(1-palm.x)*canvas.width,foundY=palm.y*canvas.height;handX=handX===null?foundX:handX+(foundX-handX)*.38;handY=handY===null?foundY:handY+(foundY-handY)*.38;cursorX+=(handX/canvas.width*innerWidth-cursorX)*.3;cursorY+=(handY/canvas.height*innerHeight-cursorY)*.3;cursor.style.left=cursorX+'px';cursor.style.top=cursorY+'px';applyGesture(readGesture(lm));gestureLabel.textContent=gesture==='fist'?'● CLOSED · GRAB':'● OPEN · STEER';statusText.textContent=gesture==='fist'?'Closed hand · grabbing':'Open hand · steering';updateObjects();ctx.beginPath();ctx.arc(handX,handY,11,0,Math.PI*2);ctx.fillStyle=gesture==='fist'?'#ff765d':'#d9ff42';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#151217';ctx.stroke();ctx.beginPath();ctx.arc(handX,handY,3,0,Math.PI*2);ctx.fillStyle='#151217';ctx.fill();
+          const lm2=result.landmarks[1];if(lm2){const palm2=[0,5,9,13,17].reduce((p,i)=>({x:p.x+lm2[i].x/5,y:p.y+lm2[i].y/5}),{x:0,y:0}),cameraX=(1-palm2.x)*canvas.width,cameraY=palm2.y*canvas.height;secondX+=(cameraX/canvas.width*innerWidth-secondX)*.3;secondY+=(cameraY/canvas.height*innerHeight-secondY)*.3;secondCursor.style.left=secondX+'px';secondCursor.style.top=secondY+'px';secondCursor.classList.add('active');applyGesture2(readGesture(lm2));updateSecondObjects();ctx.beginPath();ctx.arc(cameraX,cameraY,11,0,Math.PI*2);ctx.fillStyle=gesture2==='fist'?'#7557ff':'#4169f6';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#151217';ctx.stroke();ctx.beginPath();ctx.arc(cameraX,cameraY,3,0,Math.PI*2);ctx.fillStyle='#151217';ctx.fill();gestureLabel.textContent=(gesture==='fist'?'LIME · GRAB':'LIME · STEER')+'  +  '+(gesture2==='fist'?'BLUE · GRAB':'BLUE · STEER');}else{secondCursor.classList.remove('active');}}
+        else{secondCursor.classList.remove('active');gestureLabel.textContent='SHOW YOUR HAND';statusText.textContent='Looking for a hand';}
+      }
+      requestAnimationFrame(trackHand);
+    }
+    env.allowLocalModels=false;
+    let agentBusy=false,transcriber=null,transcriberPromise=null,audioStream=null,audioContext=null,audioSource=null,audioProcessor=null,silentGain=null,pcmChunks=[],pushToTalkActive=false;
+    const say=text=>new Promise(resolve=>{speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.rate=1.03;utterance.pitch=1.02;utterance.onend=resolve;utterance.onerror=resolve;speechSynthesis.speak(utterance);});
+    function showVoice(text){voiceText.textContent=text;voicePanel.classList.add('show');}
+    function findObject(text){
+      const aliases=[['black','black block'],['dark','black block'],['note','black block'],['blue','blue block'],['card','blue block'],['green','green block'],['pill','green block'],['orange','orange block'],['circle','orange block']];
+      const match=aliases.find(([word])=>text.includes(word));return match?document.querySelector(`[data-object="${match[1]}"]`):null;
+    }
+    function findDestination(text,board,item){
+      const gap=26,maxX=board.width-item.width-gap,maxY=board.height-item.height-gap;let x=(board.width-item.width)/2,y=(board.height-item.height)/2;
+      if(text.includes('left'))x=gap;if(text.includes('right')||text.includes('side'))x=maxX;if(text.includes('top'))y=gap;if(text.includes('bottom'))y=maxY;
+      return{x:Math.max(0,x),y:Math.max(0,y)};
+    }
+    function tween(duration,draw){return new Promise(resolve=>{const start=performance.now();function frame(now){const t=Math.min(1,(now-start)/duration),ease=1-Math.pow(1-t,3);draw(ease);t<1?requestAnimationFrame(frame):resolve();}requestAnimationFrame(frame);});}
+    async function performAgentMove(object,text){
+      agentBusy=true;const boardEl=document.querySelector('#artboard'),board=boardEl.getBoundingClientRect(),rect=object.getBoundingClientRect(),startCursor={x:innerWidth-70,y:110},pickup={x:rect.left+rect.width/2,y:rect.top+rect.height/2};agentCursor.style.left=startCursor.x+'px';agentCursor.style.top=startCursor.y+'px';agentCursor.classList.add('active');
+      const objectName=object.dataset.object,ack=`Okay, let's move the ${objectName}.`;showVoice(ack);const speaking=say(ack);
+      await tween(650,t=>{agentCursor.style.left=(startCursor.x+(pickup.x-startCursor.x)*t)+'px';agentCursor.style.top=(startCursor.y+(pickup.y-startCursor.y)*t)+'px';});object.classList.add('dragging');
+      const item={width:rect.width,height:rect.height},destination=findDestination(text,board,item),from={x:rect.left-board.left,y:rect.top-board.top},toCursor={x:board.left+destination.x+rect.width/2,y:board.top+destination.y+rect.height/2};
+      await tween(1050,t=>{const x=from.x+(destination.x-from.x)*t,y=from.y+(destination.y-from.y)*t;object.style.left=x+'px';object.style.top=y+'px';agentCursor.style.left=(pickup.x+(toCursor.x-pickup.x)*t)+'px';agentCursor.style.top=(pickup.y+(toCursor.y-pickup.y)*t)+'px';});object.classList.remove('dragging');await speaking;showVoice(`Done — the ${objectName} is in place.`);await say('Done.');setTimeout(()=>voicePanel.classList.remove('show'),2200);agentCursor.classList.remove('active');agentBusy=false;
+    }
+    async function handleVoiceCommand(raw){
+      const text=raw.toLowerCase().trim();showVoice(`You: “${raw}”`);const object=findObject(text);
+      if(!object||!/(move|put|place|take|shift)/.test(text)){agentBusy=true;const reply="I can move the black, blue, green, or orange block. Try saying: move the black block to the bottom left.";showVoice(reply);await say(reply);agentBusy=false;return;}
+      performAgentMove(object,text);
+    }
+    function loadWhisper(){
+      if(transcriber)return Promise.resolve(transcriber);if(transcriberPromise)return transcriberPromise;
+      showVoice('Loading local speech model — first use can take a minute…');
+      const options=navigator.gpu?{device:'webgpu',dtype:{encoder_model:'fp32',decoder_model_merged:'q4'}}:{device:'wasm',dtype:'q8'};
+      transcriberPromise=pipeline('automatic-speech-recognition','onnx-community/whisper-tiny.en',{...options,progress_callback:p=>{if(p.status==='progress'&&p.total){const percent=Math.round(p.loaded/p.total*100);showVoice(`Loading local speech model · ${percent}%`);}}}).then(model=>{transcriber=model;showVoice('Ready — hold V and speak.');return model;}).catch(error=>{transcriberPromise=null;throw error;});return transcriberPromise;
+    }
+    function resampleAudio(chunks,inputRate){
+      const length=chunks.reduce((sum,chunk)=>sum+chunk.length,0),input=new Float32Array(length);let offset=0;for(const chunk of chunks){input.set(chunk,offset);offset+=chunk.length;}if(inputRate===16000)return input;
+      const ratio=inputRate/16000,output=new Float32Array(Math.floor(input.length/ratio));for(let i=0;i<output.length;i++){const position=i*ratio,left=Math.floor(position),right=Math.min(left+1,input.length-1),mix=position-left;output[i]=input[left]*(1-mix)+input[right]*mix;}return output;
+    }
+    async function startPushToTalk(){
+      if(pushToTalkActive||agentBusy)return;pushToTalkActive=true;voiceButton.classList.add('listening');voiceButton.textContent='Listening… release V';showVoice('Listening…');
+      try{audioStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,channelCount:1}});if(!pushToTalkActive){audioStream.getTracks().forEach(track=>track.stop());return;}audioContext=new AudioContext();await audioContext.resume();pcmChunks=[];audioSource=audioContext.createMediaStreamSource(audioStream);audioProcessor=audioContext.createScriptProcessor(4096,1,1);silentGain=audioContext.createGain();silentGain.gain.value=0;audioProcessor.onaudioprocess=e=>pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));audioSource.connect(audioProcessor);audioProcessor.connect(silentGain);silentGain.connect(audioContext.destination);loadWhisper().catch(()=>{});}catch{pushToTalkActive=false;voiceButton.classList.remove('listening');voiceButton.textContent='Hold V to talk';showVoice('Microphone access is blocked. Allow it in site permissions, then try again.');}
+    }
+    async function stopPushToTalk(){
+      if(!pushToTalkActive)return;pushToTalkActive=false;if(!audioContext){voiceButton.classList.remove('listening');voiceButton.textContent='Hold V to talk';return;}voiceButton.classList.remove('listening');voiceButton.textContent='Transcribing…';
+      const inputRate=audioContext.sampleRate;audioProcessor?.disconnect();audioSource?.disconnect();silentGain?.disconnect();audioStream?.getTracks().forEach(track=>track.stop());await audioContext.close();const audio=resampleAudio(pcmChunks,inputRate);audioContext=null;audioProcessor=null;audioSource=null;silentGain=null;
+      if(audio.length<2400){voiceButton.textContent='Hold V to talk';showVoice('That was too short. Hold V while you speak, then release.');return;}
+      try{const model=await loadWhisper();showVoice('Transcribing locally…');const result=await model(audio,{language:'en',task:'transcribe'}),text=result.text.trim();voiceButton.textContent='Hold V to talk';if(text){showVoice(`You: “${text}”`);handleVoiceCommand(text);}else{showVoice('I didn’t catch that. Hold V and try again.');}}catch(error){console.error(error);voiceButton.textContent='Hold V to talk';showVoice('Whisper could not process that recording. Try again or use the typed command.');}
+    }
+    button.addEventListener('click',toggleCamera);
+    voiceButton.addEventListener('pointerdown',e=>{e.preventDefault();startPushToTalk();});
+    voiceButton.addEventListener('pointerup',e=>{e.preventDefault();stopPushToTalk();});
+    voiceButton.addEventListener('pointercancel',stopPushToTalk);
+    addEventListener('keydown',e=>{if(e.code==='KeyV'&&!e.repeat&&!['INPUT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();startPushToTalk();}});
+    addEventListener('keyup',e=>{if(e.code==='KeyV'){e.preventDefault();stopPushToTalk();}});
+    voiceForm.addEventListener('submit',e=>{e.preventDefault();const command=voiceInput.value.trim();if(command&&!agentBusy){voiceInput.value='';handleVoiceCommand(command);}});
+    document.querySelectorAll('.object').forEach(el=>{el.addEventListener('pointerdown',e=>{if(running)return;el.setPointerCapture(e.pointerId);el.classList.add('dragging');let r=el.getBoundingClientRect(),dx=e.clientX-r.left,dy=e.clientY-r.top;const move=v=>{let b=document.querySelector('#artboard').getBoundingClientRect();el.style.left=Math.max(0,Math.min(b.width-r.width,v.clientX-b.left-dx))+'px';el.style.top=Math.max(0,Math.min(b.height-r.height,v.clientY-b.top-dy))+'px'};el.onpointermove=move;el.onpointerup=()=>{el.classList.remove('dragging');el.onpointermove=null;el.onpointerup=null;};});});
+  </script>
+</body>
+</html>
