@@ -21,6 +21,8 @@
     .status.live .status-dot { background:#36b35b; box-shadow:0 0 0 4px rgba(54,179,91,.14); }
     .primary { border:0; border-radius:999px; background:var(--ink); color:white; padding:11px 17px; font-weight:800; cursor:pointer; }
     .primary:hover { background:#302a32; }
+    .secondary-action { border:1px solid var(--ink); border-radius:999px; background:transparent; color:var(--ink); padding:10px 16px; font-weight:800; cursor:pointer; }
+    .secondary-action.active { background:var(--coral); box-shadow:0 0 0 4px rgba(255,118,93,.18); }
     main { position:relative; display:grid; grid-template-columns:250px 1fr; min-height:0; }
     aside { border-right:1px solid var(--line); padding:26px 20px; display:flex; flex-direction:column; gap:28px; background:rgba(255,255,255,.18); z-index:5; }
     .eyebrow { font-size:.72rem; font-weight:900; letter-spacing:.13em; text-transform:uppercase; opacity:.52; margin:0 0 13px; }
@@ -70,6 +72,7 @@
       <div class="brand"><span class="brand-mark">HW</span> Handwave</div>
       <div class="header-actions">
         <div id="status" class="status"><span class="status-dot"></span><span id="statusText">Camera off</span></div>
+        <button id="screenButton" class="secondary-action">Control desktop</button>
         <button id="cameraButton" class="primary">Enable hand control</button>
       </div>
     </header>
@@ -77,7 +80,7 @@
       <aside>
         <section><p class="eyebrow">Tools</p><div class="tool active"><span class="tool-icon">↖</span> Move</div><div class="tool"><span class="tool-icon">T</span> Text</div><div class="tool"><span class="tool-icon">□</span> Shape</div></section>
         <section><p class="eyebrow">Motion control</p><div class="tool"><span class="tool-icon">◎</span> Motion cursor</div></section>
-        <div class="help"><strong>Open, close, move + twist.</strong><p>Either open palm steers its cursor. Close either hand over an object to pick it up. Move or twist while closed, then open to release.</p></div>
+        <div class="help" id="help"><strong>Open, close, move + twist.</strong><p>Either open palm steers its cursor. Close either hand over an object to pick it up. Move or twist while closed, then open to release.</p></div>
       </aside>
       <section class="workspace" id="workspace">
         <div class="canvas-title"><h1>Motion canvas</h1><p>Arrange the pieces with a wave of your hand.</p></div>
@@ -95,10 +98,17 @@
   <script type="module">
     import {FilesetResolver,HandLandmarker} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm';
     const video=document.querySelector('#video'), canvas=document.querySelector('#motionCanvas'), ctx=canvas.getContext('2d');
-    const cursor=document.querySelector('#motionCursor'),secondCursor=document.querySelector('#secondCursor'),button=document.querySelector('#cameraButton'),camera=document.querySelector('#camera');
+    const cursor=document.querySelector('#motionCursor'),secondCursor=document.querySelector('#secondCursor'),button=document.querySelector('#cameraButton'),screenButton=document.querySelector('#screenButton'),camera=document.querySelector('#camera'),help=document.querySelector('#help');
     const status=document.querySelector('#status'), statusText=document.querySelector('#statusText'), toast=document.querySelector('#toast'), gestureLabel=document.querySelector('#gestureLabel');
-    let stream=null,landmarker=null,running=false,lastVideoTime=-1,cursorX=innerWidth/2,cursorY=innerHeight/2,handX=null,handY=null,secondX=innerWidth/2,secondY=innerHeight/2,hovered=null,held=null,hovered2=null,held2=null,gesture='none',candidate='none',candidateFrames=0,gesture2='none',candidate2='none',candidateFrames2=0,handAngle=0,handAngle2=0,grabAngle=0,grabAngle2=0,startRotation=0,startRotation2=0;
+    let stream=null,landmarker=null,running=false,lastVideoTime=-1,cursorX=innerWidth/2,cursorY=innerHeight/2,handX=null,handY=null,secondX=innerWidth/2,secondY=innerHeight/2,hovered=null,held=null,hovered2=null,held2=null,gesture='none',candidate='none',candidateFrames=0,gesture2='none',candidate2='none',candidateFrames2=0,handAngle=0,handAngle2=0,grabAngle=0,grabAngle2=0,startRotation=0,startRotation2=0,screenControl=false,screenMouseDown=false,lastScreenSend=0;
     const showToast=t=>{toast.textContent=t;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),1800)};
+    const helperRequest=(path,data={})=>fetch(`http://127.0.0.1:8765${path}`,{method:path==='/health'?'GET':'POST',headers:{'Content-Type':'application/json'},body:path==='/health'?undefined:JSON.stringify(data)});
+    async function setScreenControl(enabled){
+      if(enabled&&!running){showToast('Enable the camera first');return;}
+      try{if(enabled)await helperRequest('/health');else if(screenMouseDown)await helperRequest('/mouse',{action:'up'});screenControl=enabled;screenMouseDown=false;screenButton.classList.toggle('active',enabled);screenButton.textContent=enabled?'Desktop control on':'Control desktop';help.innerHTML=enabled?'<strong>Desktop mode · lime hand only.</strong><p>Move your open hand to steer. Close your fist to press or drag; open it to release. Press Esc to stop.</p>':'<strong>Open, close, move + twist.</strong><p>Either open palm steers its cursor. Close either hand over an object to pick it up. Move or twist while closed, then open to release.</p>';showToast(enabled?'Desktop control active · Esc stops':'Desktop control stopped');}
+      catch(e){console.error(e);screenControl=false;screenButton.classList.remove('active');screenButton.textContent='Control desktop';showToast('Start the local cursor helper first');}
+    }
+    function sendScreenPosition(x,y){if(!screenControl||performance.now()-lastScreenSend<32)return;lastScreenSend=performance.now();helperRequest('/move',{x:Math.max(0,Math.min(1,x)),y:Math.max(0,Math.min(1,y))}).catch(()=>setScreenControl(false));}
     async function loadTracker(){
       if(landmarker)return;
       statusText.textContent='Loading hand tracker…';
@@ -106,7 +116,7 @@
       landmarker=await HandLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',delegate:'GPU'},runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.55,minHandPresenceConfidence:.55,minTrackingConfidence:.55});
     }
     async function toggleCamera(){
-      if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;running=false;camera.classList.remove('live');cursor.classList.remove('active');secondCursor.classList.remove('active');status.classList.remove('live');statusText.textContent='Camera off';button.textContent='Enable hand control';return;}
+      if(stream){await setScreenControl(false);stream.getTracks().forEach(t=>t.stop());stream=null;running=false;camera.classList.remove('live');cursor.classList.remove('active');secondCursor.classList.remove('active');status.classList.remove('live');statusText.textContent='Camera off';button.textContent='Enable hand control';return;}
       button.disabled=true;
       try{await loadTracker();stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});video.srcObject=stream;await video.play();canvas.width=320;canvas.height=240;running=true;lastVideoTime=-1;camera.classList.add('live');cursor.classList.add('active');status.classList.add('live');statusText.textContent='Show an open hand';button.textContent='Turn camera off';showToast('Open hand steers · fist grabs');requestAnimationFrame(trackHand);}catch(e){console.error(e);showToast('Hand tracking could not start');statusText.textContent='Tracker unavailable';}finally{button.disabled=false;}
     }
@@ -123,6 +133,7 @@
       if(next!==candidate){candidate=next;candidateFrames=1;return;}
       if(++candidateFrames<4||next===gesture)return;
       const previousGesture=gesture;gesture=next;
+      if(screenControl){if(gesture==='fist'&&!screenMouseDown){screenMouseDown=true;helperRequest('/mouse',{action:'down'}).catch(()=>setScreenControl(false));}if(gesture==='open'&&screenMouseDown){screenMouseDown=false;helperRequest('/mouse',{action:'up'}).catch(()=>setScreenControl(false));}return;}
       if(gesture==='fist'&&!held&&hovered){if(hovered.matches('button')){hovered.click();showToast(`${hovered.textContent.trim()} clicked`);}else{held=hovered;grabAngle=handAngle;startRotation=objectRotation(held);held.classList.add('dragging');showToast('Picked up · twist to rotate');}}
       if(gesture==='open'&&held&&previousGesture==='fist'){held.classList.remove('dragging');held=null;showToast('Released');}
     }
@@ -135,6 +146,7 @@
       if(gesture2==='open'&&held2&&previousGesture==='fist'){held2.classList.remove('dragging');held2=null;showToast('Blue hand released');}
     }
     function updateObjects(){
+      if(screenControl){hovered?.classList.remove('hovered');hovered=null;return;}
       const el=document.elementFromPoint(cursorX,cursorY)?.closest('.object, button');
       if(el!==hovered){hovered?.classList.remove('hovered');hovered=el;hovered?.classList.add('hovered');}
       if(held&&gesture==='fist'){const board=document.querySelector('#artboard').getBoundingClientRect(),r=held.getBoundingClientRect();held.style.left=Math.max(0,Math.min(board.width-r.width,cursorX-board.left-r.width/2))+'px';held.style.top=Math.max(0,Math.min(board.height-r.height,cursorY-board.top-r.height/2))+'px';held.style.setProperty('--rotation',(startRotation+angleDelta(handAngle,grabAngle)*180/Math.PI)+'deg');}
@@ -147,13 +159,15 @@
     function trackHand(){
       if(!running)return;
       if(video.currentTime!==lastVideoTime){lastVideoTime=video.currentTime;const result=landmarker.detectForVideo(video,performance.now());ctx.clearRect(0,0,canvas.width,canvas.height);
-        if(result.landmarks.length){const lm=result.landmarks[0],palm=[0,5,9,13,17].reduce((p,i)=>({x:p.x+lm[i].x/5,y:p.y+lm[i].y/5}),{x:0,y:0});handAngle=readHandAngle(lm);const foundX=(1-palm.x)*canvas.width,foundY=palm.y*canvas.height;handX=handX===null?foundX:handX+(foundX-handX)*.38;handY=handY===null?foundY:handY+(foundY-handY)*.38;cursorX+=(handX/canvas.width*innerWidth-cursorX)*.3;cursorY+=(handY/canvas.height*innerHeight-cursorY)*.3;cursor.style.left=cursorX+'px';cursor.style.top=cursorY+'px';applyGesture(readGesture(lm));gestureLabel.textContent=gesture==='fist'?'● CLOSED · MOVE + ROTATE':'● OPEN · STEER';statusText.textContent=gesture==='fist'?'Closed hand · move or twist':'Open hand · steering';updateObjects();ctx.beginPath();ctx.arc(handX,handY,11,0,Math.PI*2);ctx.fillStyle=gesture==='fist'?'#ff765d':'#d9ff42';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#151217';ctx.stroke();ctx.beginPath();ctx.arc(handX,handY,3,0,Math.PI*2);ctx.fillStyle='#151217';ctx.fill();
+        if(result.landmarks.length){const lm=result.landmarks[0],palm=[0,5,9,13,17].reduce((p,i)=>({x:p.x+lm[i].x/5,y:p.y+lm[i].y/5}),{x:0,y:0});handAngle=readHandAngle(lm);const foundX=(1-palm.x)*canvas.width,foundY=palm.y*canvas.height;handX=handX===null?foundX:handX+(foundX-handX)*.38;handY=handY===null?foundY:handY+(foundY-handY)*.38;cursorX+=(handX/canvas.width*innerWidth-cursorX)*.3;cursorY+=(handY/canvas.height*innerHeight-cursorY)*.3;cursor.style.left=cursorX+'px';cursor.style.top=cursorY+'px';sendScreenPosition(handX/canvas.width,handY/canvas.height);applyGesture(readGesture(lm));gestureLabel.textContent=screenControl?(gesture==='fist'?'● DESKTOP · PRESS':'● DESKTOP · STEER'):(gesture==='fist'?'● CLOSED · MOVE + ROTATE':'● OPEN · STEER');statusText.textContent=screenControl?'Controlling desktop · Esc stops':(gesture==='fist'?'Closed hand · move or twist':'Open hand · steering');updateObjects();ctx.beginPath();ctx.arc(handX,handY,11,0,Math.PI*2);ctx.fillStyle=gesture==='fist'?'#ff765d':'#d9ff42';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#151217';ctx.stroke();ctx.beginPath();ctx.arc(handX,handY,3,0,Math.PI*2);ctx.fillStyle='#151217';ctx.fill();
           const lm2=result.landmarks[1];if(lm2){const palm2=[0,5,9,13,17].reduce((p,i)=>({x:p.x+lm2[i].x/5,y:p.y+lm2[i].y/5}),{x:0,y:0}),cameraX=(1-palm2.x)*canvas.width,cameraY=palm2.y*canvas.height;handAngle2=readHandAngle(lm2);secondX+=(cameraX/canvas.width*innerWidth-secondX)*.3;secondY+=(cameraY/canvas.height*innerHeight-secondY)*.3;secondCursor.style.left=secondX+'px';secondCursor.style.top=secondY+'px';secondCursor.classList.add('active');applyGesture2(readGesture(lm2));updateSecondObjects();ctx.beginPath();ctx.arc(cameraX,cameraY,11,0,Math.PI*2);ctx.fillStyle=gesture2==='fist'?'#7557ff':'#4169f6';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#151217';ctx.stroke();ctx.beginPath();ctx.arc(cameraX,cameraY,3,0,Math.PI*2);ctx.fillStyle='#151217';ctx.fill();gestureLabel.textContent=(gesture==='fist'?'LIME · MOVE + ROTATE':'LIME · STEER')+'  +  '+(gesture2==='fist'?'BLUE · MOVE + ROTATE':'BLUE · STEER');}else{secondCursor.classList.remove('active');}}
         else{secondCursor.classList.remove('active');gestureLabel.textContent='SHOW YOUR HAND';statusText.textContent='Looking for a hand';}
       }
       requestAnimationFrame(trackHand);
     }
     button.addEventListener('click',toggleCamera);
+    screenButton.addEventListener('click',()=>setScreenControl(!screenControl));
+    addEventListener('keydown',e=>{if(e.key==='Escape'&&screenControl)setScreenControl(false);});
     document.querySelectorAll('.object').forEach(el=>{el.addEventListener('pointerdown',e=>{if(running)return;el.setPointerCapture(e.pointerId);el.classList.add('dragging');let r=el.getBoundingClientRect(),dx=e.clientX-r.left,dy=e.clientY-r.top;const move=v=>{let b=document.querySelector('#artboard').getBoundingClientRect();el.style.left=Math.max(0,Math.min(b.width-r.width,v.clientX-b.left-dx))+'px';el.style.top=Math.max(0,Math.min(b.height-r.height,v.clientY-b.top-dy))+'px'};el.onpointermove=move;el.onpointerup=()=>{el.classList.remove('dragging');el.onpointermove=null;el.onpointerup=null;};});});
   </script>
 </body>
