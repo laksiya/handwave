@@ -12,13 +12,17 @@ def encode_preview(frame, landmarks, pose):
     preview = cv2.flip(frame, 1)
     height, width = preview.shape[:2]
     if landmarks:
-        points = [(landmarks[8], (66, 255, 217))]
-        if pose in ("scroll", "middle_pinch"):
-            points.append((landmarks[12], (246, 105, 65)))
-        for point, color in points:
-            center = (int((1 - point[0]) * width), int(point[1] * height))
-            cv2.circle(preview, center, 12, color, -1)
-            cv2.circle(preview, center, 12, (21, 18, 23), 2)
+        index = landmarks[8]
+        index_center = (int((1 - index[0]) * width), int(index[1] * height))
+        cv2.circle(preview, index_center, 12, (66, 255, 217), -1)
+        cv2.circle(preview, index_center, 12, (21, 18, 23), 2)
+        if pose == "index_pinch":
+            cv2.circle(preview, index_center, 17, (246, 105, 65), 4)
+        elif pose in ("scroll", "middle_pinch"):
+            middle = landmarks[12]
+            middle_center = (int((1 - middle[0]) * width), int(middle[1] * height))
+            cv2.circle(preview, middle_center, 12, (246, 105, 65), -1)
+            cv2.circle(preview, middle_center, 12, (21, 18, 23), 2)
     small = cv2.resize(preview, (320, 180), interpolation=cv2.INTER_AREA)
     ok, encoded = cv2.imencode('.jpg', small, [cv2.IMWRITE_JPEG_QUALITY, 62])
     return base64.b64encode(encoded).decode('ascii') if ok else None

@@ -72,8 +72,10 @@ class PointerTests(unittest.TestCase):
 
     def test_preview_encodes_tracked_hand_overlay(self):
         frame = np.zeros((180, 320, 3), dtype=np.uint8)
-        image = encode_preview(frame, hand("index", "middle"), "scroll")
-        self.assertGreater(len(image), 100)
+        scroll_image = encode_preview(frame, hand("index", "middle"), "scroll")
+        pinch_image = encode_preview(frame, pinched("index"), "index_pinch")
+        self.assertGreater(len(scroll_image), 100)
+        self.assertGreater(len(pinch_image), 100)
 
 
 if __name__ == "__main__":
