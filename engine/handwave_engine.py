@@ -2,9 +2,9 @@ import json, queue, sys, threading, time
 import cv2
 import mediapipe as mp
 from config import EngineConfig
-from gestures import GestureState, classify_hand
+from gestures import GestureController, classify_hand
 from pointer_win32 import WindowsPointer
-from tracking import AdaptivePointer, palm_center
+from tracking import AdaptivePointer
 
 def emit(event, **data): print(json.dumps({"event": event, **data}), flush=True)
 
@@ -31,7 +31,7 @@ class FreshFrameCamera:
 class TrackingEngine:
     def __init__(self):
         self.config, self.commands, self.running, self.paused = EngineConfig(), queue.Queue(), True, False
-        self.pointer, self.smoother, self.gesture, self.last_hand = WindowsPointer(), AdaptivePointer(), GestureState(), 0.0
+        self.pointer, self.smoother, self.gesture, self.last_hand = WindowsPointer(), AdaptivePointer(), GestureController(), 0.0
 
     def command_reader(self):
         for line in sys.stdin:
@@ -45,10 +45,10 @@ class TrackingEngine:
             except queue.Empty: return
             command = message.get("command")
             if command == "stop": self.running = False
-            elif command == "pause": self.paused = True; self.pointer.release(); emit("paused")
+            elif command == "pause": self.paused = True; self.pointer.release(); self.gesture.reset(); emit("paused")
             elif command == "resume": self.paused = False; emit("resumed")
             elif command == "configure":
-                self.config.update(message.get("values", {})); self.smoother.configure(self.config.active_margin, self.config.smoothing_floor, self.config.smoothing_boost); self.gesture.stable_frames = self.config.gesture_frames; emit("configured", config=self.config.json())
+                self.config.update(message.get("values", {})); self.smoother.configure(self.config.active_margin, self.config.smoothing_floor, self.config.smoothing_boost); self.gesture.state.stable_frames = max(2, self.config.gesture_frames); emit("configured", config=self.config.json())
 
     def run(self):
         threading.Thread(target=self.command_reader, daemon=True).start(); camera = FreshFrameCamera(self.config)
@@ -62,13 +62,22 @@ class TrackingEngine:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB); rgb.flags.writeable = False; result = hands.process(rgb); now = time.perf_counter(); frame_count += 1
                 if result.multi_hand_landmarks:
                     landmarks = [(p.x, p.y, p.z) for p in result.multi_hand_landmarks[0].landmark]
-                    raw_x, raw_y = palm_center(landmarks); screen_x, screen_y = self.smoother.update(1 - raw_x, raw_y); self.pointer.move(screen_x, screen_y); self.last_hand = now
-                    transition = self.gesture.update(classify_hand(landmarks))
-                    if transition:
-                        _, current = transition; self.pointer.press() if current == "fist" else self.pointer.release(); emit("gesture", gesture=current)
-                elif now - self.last_hand > self.config.lost_hand_release_seconds: self.pointer.release()
+                    raw_x, raw_y = landmarks[8][0], landmarks[8][1]
+                    current, should_move, actions = self.gesture.update(classify_hand(landmarks), now, raw_y)
+                    if should_move:
+                        screen_x, screen_y = self.smoother.update(1 - raw_x, raw_y); self.pointer.move(screen_x, screen_y)
+                    for action in actions:
+                        if action == "click": self.pointer.click()
+                        elif action == "right_click": self.pointer.right_click()
+                        elif action == "press": self.pointer.press()
+                        elif action == "release": self.pointer.release()
+                        elif isinstance(action, tuple) and action[0] == "scroll": self.pointer.scroll(action[1])
+                    self.last_hand = now
+                elif now - self.last_hand > self.config.lost_hand_release_seconds:
+                    for action in self.gesture.reset():
+                        if action == "release": self.pointer.release()
                 if now - last_status >= 1.0:
-                    emit("tracking", fps=round(frame_count / (now - fps_started), 1), gesture=self.gesture.current, hand=bool(result.multi_hand_landmarks)); last_status = now
+                    emit("tracking", fps=round(frame_count / (now - fps_started), 1), gesture=self.gesture.state.current, hand=bool(result.multi_hand_landmarks)); last_status = now
         finally:
             self.pointer.release(); hands.close(); camera.close(); emit("stopped")
         return 0

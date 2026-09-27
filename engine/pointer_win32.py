@@ -1,6 +1,6 @@
 import ctypes
 
-LEFT_DOWN, LEFT_UP = 0x0002, 0x0004
+LEFT_DOWN, LEFT_UP, RIGHT_DOWN, RIGHT_UP, WHEEL = 0x0002, 0x0004, 0x0008, 0x0010, 0x0800
 
 class WindowsPointer:
     def __init__(self):
@@ -16,3 +16,12 @@ class WindowsPointer:
     def release(self):
         if self.pressed:
             self.user32.mouse_event(LEFT_UP, 0, 0, 0, 0); self.pressed = False
+
+    def click(self):
+        self.user32.mouse_event(LEFT_DOWN, 0, 0, 0, 0); self.user32.mouse_event(LEFT_UP, 0, 0, 0, 0)
+
+    def right_click(self):
+        self.user32.mouse_event(RIGHT_DOWN, 0, 0, 0, 0); self.user32.mouse_event(RIGHT_UP, 0, 0, 0, 0)
+
+    def scroll(self, amount):
+        self.user32.mouse_event(WHEEL, 0, 0, int(amount * 960), 0)

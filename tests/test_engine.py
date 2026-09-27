@@ -4,29 +4,53 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "engine"))
 
-from gestures import GestureState, classify_hand
+from gestures import GestureController, GestureState, classify_hand
 from tracking import AdaptivePointer
 
 
-def hand(open_hand):
-    points = [(0.5, 0.8, 0.0)] * 21
-    points = list(points)
-    for tip, pip in ((8, 6), (12, 10), (16, 14), (20, 18)):
-        points[pip] = (0.5, 0.55, 0.0)
-        points[tip] = (0.5, 0.2 if open_hand else 0.65, 0.0)
+def hand(*extended):
+    points = [(0.5, 0.8, 0.0) for _ in range(21)]
+    points[4], points[5], points[17] = (0.2, 0.7, 0.0), (0.4, 0.55, 0.0), (0.6, 0.55, 0.0)
+    for name, tip, pip, x in (("index", 8, 6, 0.44), ("middle", 12, 10, 0.49), ("ring", 16, 14, 0.54), ("pinky", 20, 18, 0.59)):
+        points[pip] = (x, 0.55, 0.0)
+        points[tip] = (x, 0.2 if name in extended else 0.65, 0.0)
+    return points
+
+def pinched(finger):
+    points = hand("index")
+    tip = 8 if finger == "index" else 12
+    points[tip] = (0.30, 0.50, 0.0)
+    points[4] = (0.305, 0.505, 0.0)
     return points
 
 
 class GestureTests(unittest.TestCase):
-    def test_open_and_fist_classification(self):
-        self.assertEqual(classify_hand(hand(True)), "open")
-        self.assertEqual(classify_hand(hand(False)), "fist")
+    def test_recommended_pose_classification(self):
+        self.assertEqual(classify_hand(hand("index")), "point")
+        self.assertEqual(classify_hand(hand("index", "middle")), "scroll")
+        self.assertEqual(classify_hand(hand("index", "middle", "ring", "pinky")), "open")
+        self.assertEqual(classify_hand(hand()), "fist")
+        self.assertEqual(classify_hand(pinched("index")), "index_pinch")
+        self.assertEqual(classify_hand(pinched("middle")), "middle_pinch")
 
     def test_transition_requires_stable_frames(self):
         state = GestureState(stable_frames=3)
         self.assertIsNone(state.update("fist"))
         self.assertIsNone(state.update("fist"))
         self.assertEqual(state.update("fist"), ("none", "fist"))
+
+    def test_quick_index_pinch_clicks_and_held_pinch_drags(self):
+        controller = GestureController(stable_frames=2, drag_hold=0.28)
+        controller.update("index_pinch", 0.00, 0.5)
+        controller.update("index_pinch", 0.02, 0.5)
+        controller.update("point", 0.12, 0.5)
+        _, _, actions = controller.update("point", 0.14, 0.5)
+        self.assertIn("click", actions)
+        controller.update("index_pinch", 1.00, 0.5)
+        controller.update("index_pinch", 1.02, 0.5)
+        _, moving, actions = controller.update("index_pinch", 1.31, 0.5)
+        self.assertTrue(moving)
+        self.assertIn("press", actions)
 
 
 class PointerTests(unittest.TestCase):
