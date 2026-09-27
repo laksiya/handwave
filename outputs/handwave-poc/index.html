@@ -36,7 +36,7 @@
     .canvas-title p { margin:8px 0 0; font-size:.86rem; opacity:.55; }
     .artboard { position:absolute; inset:120px 8% 8%; min-height:410px; background:#fff; border:1px solid var(--ink); box-shadow:10px 10px 0 rgba(21,18,23,.14); overflow:hidden; }
     .object { position:absolute; user-select:none; cursor:grab; touch-action:none; transition:box-shadow .2s, transform .15s; }
-    .object.hovered { outline:3px solid var(--blue); outline-offset:4px; }
+    .object.hovered, button.hovered { outline:3px solid var(--blue); outline-offset:4px; }
     .object.dragging { cursor:grabbing; box-shadow:0 18px 42px rgba(21,18,23,.23); transform:scale(1.02); }
     .obj-card { left:13%; top:20%; width:230px; height:158px; padding:22px; border-radius:24px; background:var(--blue); color:white; transform:rotate(-4deg); }
     .obj-card.dragging { transform:rotate(-4deg) scale(1.02); }
@@ -122,7 +122,7 @@
       if(next!==candidate){candidate=next;candidateFrames=1;return;}
       if(++candidateFrames<4||next===gesture)return;
       const previousGesture=gesture;gesture=next;
-      if(gesture==='fist'&&!held&&hovered){held=hovered;held.classList.add('dragging');showToast('Picked up');}
+      if(gesture==='fist'&&!held&&hovered){if(hovered.matches('button')){hovered.click();showToast(`${hovered.textContent.trim()} clicked`);}else{held=hovered;held.classList.add('dragging');showToast('Picked up');}}
       if(gesture==='open'&&held&&previousGesture==='fist'){held.classList.remove('dragging');held=null;showToast('Released');}
     }
     function applyGesture2(next){
@@ -130,16 +130,16 @@
       if(next!==candidate2){candidate2=next;candidateFrames2=1;return;}
       if(++candidateFrames2<4||next===gesture2)return;
       const previousGesture=gesture2;gesture2=next;
-      if(gesture2==='fist'&&!held2&&hovered2&&hovered2!==held){held2=hovered2;held2.classList.add('dragging');showToast('Blue hand picked up');}
+      if(gesture2==='fist'&&!held2&&hovered2&&hovered2!==held){if(hovered2.matches('button')){hovered2.click();showToast(`${hovered2.textContent.trim()} clicked`);}else{held2=hovered2;held2.classList.add('dragging');showToast('Blue hand picked up');}}
       if(gesture2==='open'&&held2&&previousGesture==='fist'){held2.classList.remove('dragging');held2=null;showToast('Blue hand released');}
     }
     function updateObjects(){
-      const el=document.elementFromPoint(cursorX,cursorY)?.closest('.object');
+      const el=document.elementFromPoint(cursorX,cursorY)?.closest('.object, button');
       if(el!==hovered){hovered?.classList.remove('hovered');hovered=el;hovered?.classList.add('hovered');}
       if(held&&gesture==='fist'){const board=document.querySelector('#artboard').getBoundingClientRect(),r=held.getBoundingClientRect();held.style.left=Math.max(0,Math.min(board.width-r.width,cursorX-board.left-r.width/2))+'px';held.style.top=Math.max(0,Math.min(board.height-r.height,cursorY-board.top-r.height/2))+'px';}
     }
     function updateSecondObjects(){
-      const el=document.elementFromPoint(secondX,secondY)?.closest('.object');
+      const el=document.elementFromPoint(secondX,secondY)?.closest('.object, button');
       if(el!==hovered2){if(hovered2!==hovered)hovered2?.classList.remove('hovered');hovered2=el;hovered2?.classList.add('hovered');}
       if(held2&&gesture2==='fist'){const board=document.querySelector('#artboard').getBoundingClientRect(),r=held2.getBoundingClientRect();held2.style.left=Math.max(0,Math.min(board.width-r.width,secondX-board.left-r.width/2))+'px';held2.style.top=Math.max(0,Math.min(board.height-r.height,secondY-board.top-r.height/2))+'px';}
     }
