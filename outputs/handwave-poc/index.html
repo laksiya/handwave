@@ -35,17 +35,15 @@
     .canvas-title h1 { font-size:clamp(1.5rem,3vw,2.6rem); letter-spacing:-.065em; margin:0; line-height:.95; }
     .canvas-title p { margin:8px 0 0; font-size:.86rem; opacity:.55; }
     .artboard { position:absolute; inset:120px 8% 8%; min-height:410px; background:#fff; border:1px solid var(--ink); box-shadow:10px 10px 0 rgba(21,18,23,.14); overflow:hidden; }
-    .object { position:absolute; user-select:none; cursor:grab; touch-action:none; transition:box-shadow .2s, transform .15s; }
+    .object { --rotation:0deg; position:absolute; user-select:none; cursor:grab; touch-action:none; transform:rotate(var(--rotation)); transition:box-shadow .2s, transform .15s; }
     .object.hovered, button.hovered { outline:3px solid var(--blue); outline-offset:4px; }
-    .object.dragging { cursor:grabbing; box-shadow:0 18px 42px rgba(21,18,23,.23); transform:scale(1.02); }
-    .obj-card { left:13%; top:20%; width:230px; height:158px; padding:22px; border-radius:24px; background:var(--blue); color:white; transform:rotate(-4deg); }
-    .obj-card.dragging { transform:rotate(-4deg) scale(1.02); }
+    .object.dragging { cursor:grabbing; box-shadow:0 18px 42px rgba(21,18,23,.23); transform:rotate(var(--rotation)) scale(1.02); }
+    .obj-card { --rotation:-4deg; left:13%; top:20%; width:230px; height:158px; padding:22px; border-radius:24px; background:var(--blue); color:white; }
     .obj-card .num { font-size:.76rem; font-weight:800; opacity:.65; }
     .obj-card .big { margin-top:38px; font-weight:900; font-size:1.75rem; letter-spacing:-.055em; line-height:.95; }
     .obj-pill { left:52%; top:17%; padding:17px 26px; background:var(--acid); border:1px solid var(--ink); border-radius:999px; font-weight:900; font-size:1.1rem; }
     .obj-circle { left:64%; top:48%; width:145px; aspect-ratio:1; border-radius:50%; background:var(--coral); border:1px solid var(--ink); display:grid; place-items:center; font-weight:900; text-align:center; line-height:1; }
-    .obj-note { left:26%; top:59%; width:235px; padding:19px 21px; background:var(--ink); color:white; border-radius:5px; transform:rotate(2deg); }
-    .obj-note.dragging { transform:rotate(2deg) scale(1.02); }
+    .obj-note { --rotation:2deg; left:26%; top:59%; width:235px; padding:19px 21px; background:var(--ink); color:white; border-radius:5px; }
     .obj-note b { font-size:1.1rem; }
     .obj-note p { margin:8px 0 0; font-size:.78rem; opacity:.66; line-height:1.4; }
     .motion-cursor { position:fixed; width:34px; height:34px; border:2px solid var(--ink); border-radius:50%; pointer-events:none; z-index:100; transform:translate(-50%,-50%); display:none; background:rgba(217,255,66,.45); box-shadow:0 0 0 7px rgba(217,255,66,.22); }
@@ -79,7 +77,7 @@
       <aside>
         <section><p class="eyebrow">Tools</p><div class="tool active"><span class="tool-icon">↖</span> Move</div><div class="tool"><span class="tool-icon">T</span> Text</div><div class="tool"><span class="tool-icon">□</span> Shape</div></section>
         <section><p class="eyebrow">Motion control</p><div class="tool"><span class="tool-icon">◎</span> Motion cursor</div></section>
-        <div class="help"><strong>Open, close, move.</strong><p>Either open palm steers its cursor. Close either hand over an object to pick it up. Move while closed, then open to release.</p></div>
+        <div class="help"><strong>Open, close, move + twist.</strong><p>Either open palm steers its cursor. Close either hand over an object to pick it up. Move or twist while closed, then open to release.</p></div>
       </aside>
       <section class="workspace" id="workspace">
         <div class="canvas-title"><h1>Motion canvas</h1><p>Arrange the pieces with a wave of your hand.</p></div>
@@ -99,7 +97,7 @@
     const video=document.querySelector('#video'), canvas=document.querySelector('#motionCanvas'), ctx=canvas.getContext('2d');
     const cursor=document.querySelector('#motionCursor'),secondCursor=document.querySelector('#secondCursor'),button=document.querySelector('#cameraButton'),camera=document.querySelector('#camera');
     const status=document.querySelector('#status'), statusText=document.querySelector('#statusText'), toast=document.querySelector('#toast'), gestureLabel=document.querySelector('#gestureLabel');
-    let stream=null,landmarker=null,running=false,lastVideoTime=-1,cursorX=innerWidth/2,cursorY=innerHeight/2,handX=null,handY=null,secondX=innerWidth/2,secondY=innerHeight/2,hovered=null,held=null,hovered2=null,held2=null,gesture='none',candidate='none',candidateFrames=0,gesture2='none',candidate2='none',candidateFrames2=0;
+    let stream=null,landmarker=null,running=false,lastVideoTime=-1,cursorX=innerWidth/2,cursorY=innerHeight/2,handX=null,handY=null,secondX=innerWidth/2,secondY=innerHeight/2,hovered=null,held=null,hovered2=null,held2=null,gesture='none',candidate='none',candidateFrames=0,gesture2='none',candidate2='none',candidateFrames2=0,handAngle=0,handAngle2=0,grabAngle=0,grabAngle2=0,startRotation=0,startRotation2=0;
     const showToast=t=>{toast.textContent=t;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),1800)};
     async function loadTracker(){
       if(landmarker)return;
@@ -117,12 +115,15 @@
       const extended=[[8,6],[12,10],[16,14],[20,18]].filter(([tip,pip])=>dist(lm[0],lm[tip])>dist(lm[0],lm[pip])*1.18).length;
       return extended>=3?'open':extended<=1?'fist':'neutral';
     }
+    const readHandAngle=lm=>Math.atan2(lm[17].y-lm[5].y,(1-lm[17].x)-(1-lm[5].x));
+    const angleDelta=(current,start)=>Math.atan2(Math.sin(current-start),Math.cos(current-start));
+    const objectRotation=el=>parseFloat(getComputedStyle(el).getPropertyValue('--rotation'))||0;
     function applyGesture(next){
       if(next==='neutral')return;
       if(next!==candidate){candidate=next;candidateFrames=1;return;}
       if(++candidateFrames<4||next===gesture)return;
       const previousGesture=gesture;gesture=next;
-      if(gesture==='fist'&&!held&&hovered){if(hovered.matches('button')){hovered.click();showToast(`${hovered.textContent.trim()} clicked`);}else{held=hovered;held.classList.add('dragging');showToast('Picked up');}}
+      if(gesture==='fist'&&!held&&hovered){if(hovered.matches('button')){hovered.click();showToast(`${hovered.textContent.trim()} clicked`);}else{held=hovered;grabAngle=handAngle;startRotation=objectRotation(held);held.classList.add('dragging');showToast('Picked up · twist to rotate');}}
       if(gesture==='open'&&held&&previousGesture==='fist'){held.classList.remove('dragging');held=null;showToast('Released');}
     }
     function applyGesture2(next){
@@ -130,24 +131,24 @@
       if(next!==candidate2){candidate2=next;candidateFrames2=1;return;}
       if(++candidateFrames2<4||next===gesture2)return;
       const previousGesture=gesture2;gesture2=next;
-      if(gesture2==='fist'&&!held2&&hovered2&&hovered2!==held){if(hovered2.matches('button')){hovered2.click();showToast(`${hovered2.textContent.trim()} clicked`);}else{held2=hovered2;held2.classList.add('dragging');showToast('Blue hand picked up');}}
+      if(gesture2==='fist'&&!held2&&hovered2&&hovered2!==held){if(hovered2.matches('button')){hovered2.click();showToast(`${hovered2.textContent.trim()} clicked`);}else{held2=hovered2;grabAngle2=handAngle2;startRotation2=objectRotation(held2);held2.classList.add('dragging');showToast('Blue hand picked up · twist to rotate');}}
       if(gesture2==='open'&&held2&&previousGesture==='fist'){held2.classList.remove('dragging');held2=null;showToast('Blue hand released');}
     }
     function updateObjects(){
       const el=document.elementFromPoint(cursorX,cursorY)?.closest('.object, button');
       if(el!==hovered){hovered?.classList.remove('hovered');hovered=el;hovered?.classList.add('hovered');}
-      if(held&&gesture==='fist'){const board=document.querySelector('#artboard').getBoundingClientRect(),r=held.getBoundingClientRect();held.style.left=Math.max(0,Math.min(board.width-r.width,cursorX-board.left-r.width/2))+'px';held.style.top=Math.max(0,Math.min(board.height-r.height,cursorY-board.top-r.height/2))+'px';}
+      if(held&&gesture==='fist'){const board=document.querySelector('#artboard').getBoundingClientRect(),r=held.getBoundingClientRect();held.style.left=Math.max(0,Math.min(board.width-r.width,cursorX-board.left-r.width/2))+'px';held.style.top=Math.max(0,Math.min(board.height-r.height,cursorY-board.top-r.height/2))+'px';held.style.setProperty('--rotation',(startRotation+angleDelta(handAngle,grabAngle)*180/Math.PI)+'deg');}
     }
     function updateSecondObjects(){
       const el=document.elementFromPoint(secondX,secondY)?.closest('.object, button');
       if(el!==hovered2){if(hovered2!==hovered)hovered2?.classList.remove('hovered');hovered2=el;hovered2?.classList.add('hovered');}
-      if(held2&&gesture2==='fist'){const board=document.querySelector('#artboard').getBoundingClientRect(),r=held2.getBoundingClientRect();held2.style.left=Math.max(0,Math.min(board.width-r.width,secondX-board.left-r.width/2))+'px';held2.style.top=Math.max(0,Math.min(board.height-r.height,secondY-board.top-r.height/2))+'px';}
+      if(held2&&gesture2==='fist'){const board=document.querySelector('#artboard').getBoundingClientRect(),r=held2.getBoundingClientRect();held2.style.left=Math.max(0,Math.min(board.width-r.width,secondX-board.left-r.width/2))+'px';held2.style.top=Math.max(0,Math.min(board.height-r.height,secondY-board.top-r.height/2))+'px';held2.style.setProperty('--rotation',(startRotation2+angleDelta(handAngle2,grabAngle2)*180/Math.PI)+'deg');}
     }
     function trackHand(){
       if(!running)return;
       if(video.currentTime!==lastVideoTime){lastVideoTime=video.currentTime;const result=landmarker.detectForVideo(video,performance.now());ctx.clearRect(0,0,canvas.width,canvas.height);
-        if(result.landmarks.length){const lm=result.landmarks[0],palm=[0,5,9,13,17].reduce((p,i)=>({x:p.x+lm[i].x/5,y:p.y+lm[i].y/5}),{x:0,y:0});const foundX=(1-palm.x)*canvas.width,foundY=palm.y*canvas.height;handX=handX===null?foundX:handX+(foundX-handX)*.38;handY=handY===null?foundY:handY+(foundY-handY)*.38;cursorX+=(handX/canvas.width*innerWidth-cursorX)*.3;cursorY+=(handY/canvas.height*innerHeight-cursorY)*.3;cursor.style.left=cursorX+'px';cursor.style.top=cursorY+'px';applyGesture(readGesture(lm));gestureLabel.textContent=gesture==='fist'?'● CLOSED · GRAB':'● OPEN · STEER';statusText.textContent=gesture==='fist'?'Closed hand · grabbing':'Open hand · steering';updateObjects();ctx.beginPath();ctx.arc(handX,handY,11,0,Math.PI*2);ctx.fillStyle=gesture==='fist'?'#ff765d':'#d9ff42';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#151217';ctx.stroke();ctx.beginPath();ctx.arc(handX,handY,3,0,Math.PI*2);ctx.fillStyle='#151217';ctx.fill();
-          const lm2=result.landmarks[1];if(lm2){const palm2=[0,5,9,13,17].reduce((p,i)=>({x:p.x+lm2[i].x/5,y:p.y+lm2[i].y/5}),{x:0,y:0}),cameraX=(1-palm2.x)*canvas.width,cameraY=palm2.y*canvas.height;secondX+=(cameraX/canvas.width*innerWidth-secondX)*.3;secondY+=(cameraY/canvas.height*innerHeight-secondY)*.3;secondCursor.style.left=secondX+'px';secondCursor.style.top=secondY+'px';secondCursor.classList.add('active');applyGesture2(readGesture(lm2));updateSecondObjects();ctx.beginPath();ctx.arc(cameraX,cameraY,11,0,Math.PI*2);ctx.fillStyle=gesture2==='fist'?'#7557ff':'#4169f6';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#151217';ctx.stroke();ctx.beginPath();ctx.arc(cameraX,cameraY,3,0,Math.PI*2);ctx.fillStyle='#151217';ctx.fill();gestureLabel.textContent=(gesture==='fist'?'LIME · GRAB':'LIME · STEER')+'  +  '+(gesture2==='fist'?'BLUE · GRAB':'BLUE · STEER');}else{secondCursor.classList.remove('active');}}
+        if(result.landmarks.length){const lm=result.landmarks[0],palm=[0,5,9,13,17].reduce((p,i)=>({x:p.x+lm[i].x/5,y:p.y+lm[i].y/5}),{x:0,y:0});handAngle=readHandAngle(lm);const foundX=(1-palm.x)*canvas.width,foundY=palm.y*canvas.height;handX=handX===null?foundX:handX+(foundX-handX)*.38;handY=handY===null?foundY:handY+(foundY-handY)*.38;cursorX+=(handX/canvas.width*innerWidth-cursorX)*.3;cursorY+=(handY/canvas.height*innerHeight-cursorY)*.3;cursor.style.left=cursorX+'px';cursor.style.top=cursorY+'px';applyGesture(readGesture(lm));gestureLabel.textContent=gesture==='fist'?'● CLOSED · MOVE + ROTATE':'● OPEN · STEER';statusText.textContent=gesture==='fist'?'Closed hand · move or twist':'Open hand · steering';updateObjects();ctx.beginPath();ctx.arc(handX,handY,11,0,Math.PI*2);ctx.fillStyle=gesture==='fist'?'#ff765d':'#d9ff42';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#151217';ctx.stroke();ctx.beginPath();ctx.arc(handX,handY,3,0,Math.PI*2);ctx.fillStyle='#151217';ctx.fill();
+          const lm2=result.landmarks[1];if(lm2){const palm2=[0,5,9,13,17].reduce((p,i)=>({x:p.x+lm2[i].x/5,y:p.y+lm2[i].y/5}),{x:0,y:0}),cameraX=(1-palm2.x)*canvas.width,cameraY=palm2.y*canvas.height;handAngle2=readHandAngle(lm2);secondX+=(cameraX/canvas.width*innerWidth-secondX)*.3;secondY+=(cameraY/canvas.height*innerHeight-secondY)*.3;secondCursor.style.left=secondX+'px';secondCursor.style.top=secondY+'px';secondCursor.classList.add('active');applyGesture2(readGesture(lm2));updateSecondObjects();ctx.beginPath();ctx.arc(cameraX,cameraY,11,0,Math.PI*2);ctx.fillStyle=gesture2==='fist'?'#7557ff':'#4169f6';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#151217';ctx.stroke();ctx.beginPath();ctx.arc(cameraX,cameraY,3,0,Math.PI*2);ctx.fillStyle='#151217';ctx.fill();gestureLabel.textContent=(gesture==='fist'?'LIME · MOVE + ROTATE':'LIME · STEER')+'  +  '+(gesture2==='fist'?'BLUE · MOVE + ROTATE':'BLUE · STEER');}else{secondCursor.classList.remove('active');}}
         else{secondCursor.classList.remove('active');gestureLabel.textContent='SHOW YOUR HAND';statusText.textContent='Looking for a hand';}
       }
       requestAnimationFrame(trackHand);
