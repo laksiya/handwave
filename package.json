@@ -1,0 +1,34 @@
+{
+  "name": "handwave-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tray-based Windows hand motion cursor controller",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^38.1.2",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.handwave.desktop",
+    "productName": "Handwave",
+    "files": [
+      "desktop/**/*",
+      "outputs/handwave-poc/index.html",
+      "outputs/handwave-poc/cursor_server.py"
+    ],
+    "asarUnpack": [
+      "outputs/handwave-poc/cursor_server.py"
+    ],
+    "extraMetadata": {
+      "main": "desktop/main.cjs"
+    },
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    }
+  }
+}

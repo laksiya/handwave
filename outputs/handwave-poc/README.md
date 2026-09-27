@@ -7,3 +7,7 @@
 5. Press **Esc** at any time to stop desktop control.
 
 The helper listens only on this computer (`127.0.0.1`) and accepts requests only from a locally served page.
+
+## Desktop app
+
+From the repository root, run `npm install` once and then `npm start`. Closing the window hides Handwave in the Windows tray, so tracking can continue. Double-click the tray icon to reopen it, or use its menu to stop control or quit. Escape is registered globally as an emergency stop.

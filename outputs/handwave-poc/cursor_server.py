@@ -2,6 +2,7 @@
 
 import ctypes
 import json
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,6 +16,37 @@ LEFT_UP = 0x0004
 last_activity = time.monotonic()
 mouse_is_down = False
 state_lock = threading.Lock()
+
+
+def move_cursor(x, y):
+    global last_activity
+    x = max(0.0, min(1.0, float(x)))
+    y = max(0.0, min(1.0, float(y)))
+    user32.SetCursorPos(round(x * (user32.GetSystemMetrics(0) - 1)), round(y * (user32.GetSystemMetrics(1) - 1)))
+    with state_lock:
+        last_activity = time.monotonic()
+
+
+def mouse_button(action):
+    global last_activity, mouse_is_down
+    if action not in ("down", "up"):
+        raise ValueError("Invalid mouse action")
+    user32.mouse_event(LEFT_DOWN if action == "down" else LEFT_UP, 0, 0, 0, 0)
+    with state_lock:
+        last_activity = time.monotonic()
+        mouse_is_down = action == "down"
+
+
+def run_stdio():
+    for line in sys.stdin:
+        try:
+            message = json.loads(line)
+            if message.get("type") == "move":
+                move_cursor(message["x"], message["y"])
+            elif message.get("type") == "mouse":
+                mouse_button(message["action"])
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+            continue
 
 
 def release_if_stale():
@@ -61,19 +93,10 @@ class CursorHandler(BaseHTTPRequestHandler):
             length = min(int(self.headers.get("Content-Length", "0")), 1024)
             data = json.loads(self.rfile.read(length) or b"{}")
             if self.path == "/move":
-                x = max(0.0, min(1.0, float(data["x"])))
-                y = max(0.0, min(1.0, float(data["y"])))
-                user32.SetCursorPos(round(x * (user32.GetSystemMetrics(0) - 1)), round(y * (user32.GetSystemMetrics(1) - 1)))
-                with state_lock:
-                    last_activity = time.monotonic()
+                move_cursor(data["x"], data["y"])
             elif self.path == "/mouse":
                 action = data.get("action")
-                if action not in ("down", "up"):
-                    raise ValueError("Invalid mouse action")
-                user32.mouse_event(LEFT_DOWN if action == "down" else LEFT_UP, 0, 0, 0, 0)
-                with state_lock:
-                    last_activity = time.monotonic()
-                    mouse_is_down = action == "down"
+                mouse_button(action)
             else:
                 self._headers(404)
                 return
@@ -88,10 +111,13 @@ class CursorHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"Handwave cursor helper running at http://{HOST}:{PORT}")
-    print("Keep this window open while using desktop control. Ctrl+C stops it.")
     threading.Thread(target=release_if_stale, daemon=True).start()
     try:
-        ThreadingHTTPServer((HOST, PORT), CursorHandler).serve_forever()
+        if "--stdio" in sys.argv:
+            run_stdio()
+        else:
+            print(f"Handwave cursor helper running at http://{HOST}:{PORT}")
+            print("Keep this window open while using desktop control. Ctrl+C stops it.")
+            ThreadingHTTPServer((HOST, PORT), CursorHandler).serve_forever()
     finally:
         user32.mouse_event(LEFT_UP, 0, 0, 0, 0)
