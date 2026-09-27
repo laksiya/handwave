@@ -1,8 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('handwaveDesktop', {
-  onEmergencyStop: callback => ipcRenderer.on('emergency-stop', callback),
-  onHelperError: callback => ipcRenderer.on('helper-error', callback),
-  moveCursor: (x, y) => ipcRenderer.send('cursor-move', { x, y }),
-  mouseButton: action => ipcRenderer.send('mouse-button', action)
+  pause: () => ipcRenderer.send('engine-pause'),
+  resume: () => ipcRenderer.send('engine-resume'),
+  restart: () => ipcRenderer.send('engine-restart'),
+  configure: values => ipcRenderer.send('engine-configure', values),
+  onStatus: callback => ipcRenderer.on('engine-status', (_event, message) => callback(message))
 });

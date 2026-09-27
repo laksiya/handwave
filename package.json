@@ -17,11 +17,7 @@
     "productName": "Handwave",
     "files": [
       "desktop/**/*",
-      "outputs/handwave-poc/index.html",
-      "outputs/handwave-poc/cursor_server.py"
-    ],
-    "asarUnpack": [
-      "outputs/handwave-poc/cursor_server.py"
+      "engine/**/*"
     ],
     "extraMetadata": {
       "main": "desktop/main.cjs"
